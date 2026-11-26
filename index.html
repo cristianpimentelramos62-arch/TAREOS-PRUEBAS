@@ -4,34 +4,59 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
   <title>Sistema de Tareos · AgroBerries</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <!-- defer evita que la descarga externa bloquee el primer pintado del login -->
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <style>
     :root {
-      --bg: #080d0a;
-      --bg-grad: radial-gradient(circle at 15% 10%, rgba(16, 185, 129, 0.16), transparent 42%),
-                 radial-gradient(circle at 85% 90%, rgba(5, 150, 105, 0.13), transparent 45%);
-      --card: rgba(16, 25, 20, 0.88);
-      --card-solid: #111b15;
-      --text: #ecf5ef;
-      --muted: #8ea396;
-      --border: rgba(255, 255, 255, 0.12);
-      --border-strong: rgba(52, 211, 153, 0.38);
+      --bg: #0f172a;
+      --topbar-bg: rgba(15, 23, 42, 0.96);
+      --card: #1e293b;
+      --card-solid: #1e293b;
+      --card-subtle: rgba(255, 255, 255, 0.05);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --border: #334155;
+      --border-strong: #10b981;
       --primary: #10b981;
       --primary-dark: #059669;
+      --primary-fg: #042f2e;
       --warn: #f59e0b;
       --danger: #ef4444;
-      --info: #38bdf8;
-      --input: rgba(9, 15, 12, 0.94);
-      --shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
+      --info: #0ea5e9;
+      --input: #0f172a;
+      --shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+      --scheme: dark;
+    }
+
+    body.light-theme {
+      --bg: #f8fafc;
+      --topbar-bg: rgba(255, 255, 255, 0.96);
+      --card: #ffffff;
+      --card-solid: #ffffff;
+      --card-subtle: #f1f5f9;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #cbd5e1;
+      --border-strong: #059669;
+      --primary: #059669;
+      --primary-dark: #047857;
+      --primary-fg: #ffffff;
+      --warn: #d97706;
+      --danger: #dc2626;
+      --info: #0284c7;
+      --input: #f8fafc;
+      --shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+      --scheme: light;
     }
 
     body.has-bg {
-      --card: rgba(12, 19, 15, 0.88);
-      --input: rgba(8, 13, 10, 0.92);
+      --card: rgba(30, 41, 59, 0.92);
+      --input: rgba(15, 23, 42, 0.92);
+    }
+
+    body.light-theme.has-bg {
+      --card: rgba(255, 255, 255, 0.94);
+      --input: rgba(248, 250, 252, 0.95);
     }
 
     *, *::before, *::after {
@@ -48,9 +73,8 @@
     }
 
     body {
-      font: 12.5px/1.38 "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font: 12.5px/1.38 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background-color: var(--bg);
-      background-image: var(--bg-grad);
       color: var(--text);
       padding-bottom: calc(24px + env(safe-area-inset-bottom));
       min-height: 100dvh;
@@ -73,7 +97,11 @@
     }
 
     body.has-bg #bg-veil {
-      background: linear-gradient(180deg, rgba(6, 11, 8, 0.72), rgba(6, 11, 8, 0.88));
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.88));
+    }
+
+    body.light-theme.has-bg #bg-veil {
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.78), rgba(248, 250, 252, 0.9));
     }
 
     .topbar {
@@ -85,13 +113,11 @@
       padding: calc(6px + env(safe-area-inset-top)) 10px 6px;
       font-size: 11px;
       color: var(--muted);
-      background: rgba(12, 20, 16, 0.92);
+      background: var(--topbar-bg);
       border-bottom: 1px solid var(--border);
       position: sticky;
       top: 0;
       z-index: 25;
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
     }
 
     .sync-box {
@@ -107,13 +133,11 @@
       height: 7px;
       border-radius: 50%;
       background: var(--primary);
-      box-shadow: 0 0 8px var(--primary);
       flex-shrink: 0;
     }
 
     .dot.warn {
       background: var(--warn);
-      box-shadow: 0 0 8px var(--warn);
     }
 
     #sync-indicator {
@@ -125,10 +149,22 @@
       color: var(--text);
     }
 
+    .theme-btn {
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+      background: var(--card-subtle);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 99px;
+      cursor: pointer;
+    }
+
     .mode-pill {
       flex-shrink: 0;
       display: inline-flex;
-      background: rgba(255, 255, 255, 0.07);
+      background: var(--card-subtle);
       border: 1px solid var(--border);
       border-radius: 99px;
       padding: 2px;
@@ -148,12 +184,12 @@
 
     .mode-pill button.on-script {
       background: var(--primary);
-      color: #051b11;
+      color: var(--primary-fg);
     }
 
     .mode-pill button.on-demo {
       background: var(--warn);
-      color: #1c1002;
+      color: #ffffff;
     }
 
     .wrap {
@@ -172,8 +208,6 @@
       padding: 10px 11px;
       margin-bottom: 8px;
       box-shadow: var(--shadow);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
     }
 
     .user-bar {
@@ -233,7 +267,7 @@
       width: auto;
       padding: 4px 7px;
       font-size: 11.5px;
-      color-scheme: dark;
+      color-scheme: var(--scheme);
     }
 
     input:focus, select:focus, textarea:focus {
@@ -255,7 +289,7 @@
       padding: 7px 11px;
       cursor: pointer;
       background: var(--primary);
-      color: #041c11;
+      color: var(--primary-fg);
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -267,10 +301,10 @@
     button.btn:active, label.btn:active { transform: scale(0.98); }
     button.btn:hover, label.btn:hover { background: var(--primary-dark); color: #fff; }
     button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
-    button.btn-s, label.btn-s { background: rgba(255, 255, 255, 0.08); color: var(--text); border: 1px solid var(--border); }
-    button.btn-w { background: var(--warn); color: #1b1002; }
-    button.btn-d { background: rgba(239, 68, 68, 0.18); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.35); }
-    button.btn-info, label.btn-info { background: rgba(56, 189, 248, 0.2); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.4); }
+    button.btn-s, label.btn-s { background: var(--card-subtle); color: var(--text); border: 1px solid var(--border); }
+    button.btn-w { background: var(--warn); color: #ffffff; }
+    button.btn-d { background: rgba(239, 68, 68, 0.12); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.35); }
+    button.btn-info, label.btn-info { background: rgba(14, 165, 233, 0.12); color: var(--info); border: 1px solid rgba(14, 165, 233, 0.35); }
     button.btn-xs, label.btn-xs { padding: 4px 8px; font-size: 10.5px; border-radius: 7px; }
 
     .tabs {
@@ -298,16 +332,14 @@
 
     .tabs button.active {
       background: var(--primary);
-      color: #041b10;
+      color: var(--primary-fg);
       border-color: var(--primary);
     }
 
-    /* Drawer lateral para Menú de Configuraciones y Bases de Datos */
     #menu-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.65);
-      backdrop-filter: blur(4px);
+      background: rgba(0, 0, 0, 0.55);
       z-index: 50;
       display: none;
     }
@@ -319,11 +351,11 @@
       bottom: 0;
       width: min(335px, 88vw);
       background: var(--card-solid);
-      border-left: 1px solid var(--border-strong);
+      border-left: 1px solid var(--border);
       z-index: 55;
       display: none;
       flex-direction: column;
-      box-shadow: -12px 0 36px rgba(0, 0, 0, 0.6);
+      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.35);
       padding: 14px 12px calc(18px + env(safe-area-inset-bottom));
       overflow-y: auto;
     }
@@ -345,7 +377,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--card-subtle);
       border: 1px solid var(--border);
       color: var(--text);
       border-radius: 9px;
@@ -357,9 +389,9 @@
     }
 
     .menu-item-btn:hover, .menu-item-btn.active-menu {
-      background: rgba(16, 185, 129, 0.16);
+      background: rgba(16, 185, 129, 0.14);
       border-color: var(--primary);
-      color: #6ee7b7;
+      color: var(--primary);
     }
 
     .tab-pane {
@@ -380,17 +412,17 @@
       letter-spacing: 0.03em;
     }
 
-    .b-new { background: rgba(255, 255, 255, 0.09); color: var(--muted); }
-    .b-bor { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
-    .b-env { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; }
-    .b-role { background: rgba(56, 189, 248, 0.18); color: #7dd3fc; }
+    .b-new { background: var(--card-subtle); color: var(--muted); border: 1px solid var(--border); }
+    .b-bor { background: rgba(245, 158, 11, 0.15); color: var(--warn); border: 1px solid rgba(245, 158, 11, 0.35); }
+    .b-env { background: rgba(16, 185, 129, 0.14); color: var(--primary); border: 1px solid rgba(16, 185, 129, 0.35); }
+    .b-role { background: rgba(14, 165, 233, 0.14); color: var(--info); border: 1px solid rgba(14, 165, 233, 0.35); }
 
     .chips-box {
       display: flex;
       flex-wrap: wrap;
       gap: 5px;
       padding: 6px;
-      background: rgba(0, 0, 0, 0.28);
+      background: var(--card-subtle);
       border: 1px solid var(--border);
       border-radius: 8px;
       min-height: 34px;
@@ -405,24 +437,26 @@
       font-size: 10.5px;
       font-weight: 700;
       border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--card);
       color: var(--muted);
       cursor: pointer;
       user-select: none;
     }
 
     .sel-chip.on {
-      background: rgba(16, 185, 129, 0.22);
+      background: rgba(16, 185, 129, 0.16);
       border-color: var(--primary);
-      color: #6ee7b7;
+      color: var(--primary);
     }
 
     .masivo-banner {
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(56, 189, 248, 0.12));
-      border: 1px solid var(--border-strong);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--primary);
       border-radius: 12px;
       padding: 9px 11px;
       margin-bottom: 8px;
+      box-shadow: var(--shadow);
     }
 
     .t-item {
@@ -431,7 +465,6 @@
       border-radius: 11px;
       padding: 7px 9px;
       margin-bottom: 6px;
-      backdrop-filter: blur(12px);
     }
 
     .t-top {
@@ -445,7 +478,8 @@
       width: 20px;
       height: 20px;
       border-radius: 6px;
-      background: rgba(255, 255, 255, 0.09);
+      background: var(--card-subtle);
+      border: 1px solid var(--border);
       font-size: 10px;
       font-weight: 800;
       display: inline-flex;
@@ -466,9 +500,9 @@
       font-weight: 700;
       line-height: 1.25;
       margin-bottom: 5px;
-      padding: 3px 7px;
+      padding: 4px 7px;
       border-radius: 6px;
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--card-subtle);
       min-height: 21px;
       display: flex;
       align-items: center;
@@ -497,9 +531,9 @@
       font-weight: 800;
       padding: 5px 4px;
       border-radius: 7px;
-      background: rgba(16, 185, 129, 0.16);
-      color: #6ee7b7;
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      background: rgba(16, 185, 129, 0.14);
+      color: var(--primary);
+      border: 1px solid rgba(16, 185, 129, 0.35);
     }
 
     .hrs-box {
@@ -567,8 +601,8 @@
     }
 
     .dist-total-box {
-      background: rgba(16, 185, 129, 0.18);
-      color: #6ee7b7;
+      background: rgba(16, 185, 129, 0.14);
+      color: var(--primary);
       border: 1px solid rgba(16, 185, 129, 0.35);
       border-radius: 7px;
       font-size: 11px;
@@ -577,12 +611,11 @@
       text-align: center;
     }
 
-    .bad { color: #f87171; font-size: 10.5px; font-weight: 800; }
-    .warn-txt { color: #fbbf24; font-size: 10px; font-weight: 700; }
+    .warn-txt { color: var(--warn); font-size: 10px; font-weight: 700; }
 
     .excel-drop {
       border: 1.5px dashed var(--primary);
-      background: rgba(16, 185, 129, 0.08);
+      background: var(--card-subtle);
       border-radius: 10px;
       padding: 12px;
       text-align: center;
@@ -626,33 +659,6 @@
       font-family: ui-monospace, monospace;
       padding: 5px 3px;
       text-align: center;
-    }
-
-    .ord-btns {
-      display: inline-flex;
-      gap: 2px;
-      align-items: center;
-    }
-
-    .ord-btns button {
-      border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.08);
-      color: var(--text);
-      border-radius: 5px;
-      width: 22px;
-      height: 26px;
-      font-size: 11px;
-      font-weight: 800;
-      cursor: pointer;
-      padding: 0;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .ord-btns button:disabled {
-      opacity: 0.25;
-      cursor: not-allowed;
     }
 
     .table-wrap {
@@ -699,7 +705,7 @@
     .login-wrap {
       width: 100%;
       max-width: 356px;
-      margin: 10vh auto 0;
+      margin: 8vh auto 0;
       padding: 0 12px;
     }
 
@@ -738,7 +744,7 @@
       margin-top: 10px;
       padding: 6px 8px;
       border-radius: 9px;
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--card-subtle);
       border: 1px solid var(--border);
     }
 
@@ -761,7 +767,7 @@
 
     .keypad button {
       border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--card-subtle);
       color: var(--text);
       border-radius: 9px;
       padding: 10px 0;
@@ -771,7 +777,7 @@
     }
 
     .keypad button:active {
-      background: rgba(16, 185, 129, 0.25);
+      background: rgba(16, 185, 129, 0.2);
       border-color: var(--primary);
     }
 
@@ -784,22 +790,68 @@
       margin: 0 auto;
       padding: 9px 12px;
       border-radius: 10px;
-      background: #062819;
+      background: var(--card-solid);
       border: 1px solid var(--primary);
-      color: #ecfdf5;
+      color: var(--text);
       font-size: 12px;
       font-weight: 600;
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
       display: none;
       z-index: 80;
       text-align: center;
     }
 
+    #folder-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      z-index: 70;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 14px;
+    }
+
+    #folder-modal .folder-box {
+      background: var(--card-solid);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      max-width: 440px;
+      width: 100%;
+      max-height: 82dvh;
+      display: flex;
+      flex-direction: column;
+      padding: 14px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    #folder-list {
+      overflow-y: auto;
+      margin-top: 8px;
+      padding-right: 2px;
+    }
+
+    .folder-item {
+      border: 1px solid var(--border);
+      background: var(--card-subtle);
+      border-radius: 10px;
+      padding: 9px 10px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .folder-item.active-item {
+      border-color: var(--primary);
+      background: rgba(16, 185, 129, 0.08);
+    }
+
     #modal {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.72);
-      backdrop-filter: blur(6px);
+      background: rgba(0, 0, 0, 0.65);
       z-index: 65;
       display: none;
       align-items: center;
@@ -819,14 +871,12 @@
     .rep-grid { grid-template-columns: repeat(3, 1fr); gap: 6px 5px; }
     .dist-cell select { font-size: 11px; padding: 4px 3px; font-weight: 700; text-overflow: ellipsis; }
     .dist-cell .dist-total-box { padding: 5px 4px; }
-    .dist-cell .rep-cic { color: #f87171; background: rgba(239, 68, 68, 0.10); border-color: rgba(239, 68, 68, 0.30); }
+    .dist-cell .rep-cic { color: var(--danger); background: rgba(239, 68, 68, 0.10); border-color: rgba(239, 68, 68, 0.30); }
 
     #img-modal {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.84);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      background: rgba(0, 0, 0, 0.8);
       z-index: 75;
       display: none;
       align-items: center;
@@ -836,7 +886,7 @@
 
     #img-modal .img-box {
       background: var(--card-solid);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--border);
       border-radius: 14px;
       max-width: 720px;
       width: 100%;
@@ -844,14 +894,13 @@
       display: flex;
       flex-direction: column;
       padding: 12px;
-      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.65);
     }
 
     #img-preview-scroll {
       overflow: auto;
       border-radius: 10px;
       border: 1px solid var(--border);
-      background: #070d0a;
+      background: #0f172a;
       margin: 8px 0 10px;
       max-height: 68dvh;
       -webkit-overflow-scrolling: touch;
@@ -874,6 +923,7 @@
       <span id="sync-dot" class="dot"></span>
       <span id="sync-indicator">Script (Drive)</span>
     </div>
+    <button id="btn-theme" type="button" class="theme-btn" title="Cambiar modo claro / oscuro">☀️ Claro</button>
     <div class="mode-pill">
       <button id="m-script" type="button">Script (Drive)</button>
       <button id="m-demo" type="button">Demo</button>
@@ -886,6 +936,22 @@
   <div id="app"></div>
   <datalist id="dl-dni"></datalist>
   <div id="toast"></div>
+
+  <div id="folder-modal">
+    <div class="folder-box">
+      <div class="row sp">
+        <div>
+          <div style="font-weight:800;font-size:14px">📁 Carpeta Tareos · Últimos 30 días</div>
+          <div id="folder-sub" class="m" style="font-size:10.5px">Selecciona un tareo guardado para editarlo</div>
+        </div>
+        <div class="row">
+          <button id="folder-refresh" type="button" class="btn btn-info btn-xs" title="Actualizar desde Drive">↻</button>
+          <button id="folder-close" type="button" class="btn btn-s btn-xs">✕</button>
+        </div>
+      </div>
+      <div id="folder-list"></div>
+    </div>
+  </div>
 
   <div id="modal">
     <div class="box">
@@ -924,7 +990,7 @@
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwf8wvTgrRF4gjIud5VPOZCpePM2r5dbvMRgaiey-DEd6huXGTpRgjKoj_15L7Crc1a/exec";
     const APP_NAME = "Sistema de Tareos · AgroBerries";
     const ADMIN_CODE = "0104";
-    const MAESTRO_TTL_MS = 12 * 60 * 60 * 1000; // 12 horas de vigencia caché
+    const MAESTRO_TTL_MS = 12 * 60 * 60 * 1000;
 
     window.__MEM_STORE = window.__MEM_STORE || {};
 
@@ -988,9 +1054,17 @@
       AUTH_PREFIX: "tareos_v16_auth_",
       META_MAESTROS: "tareos_v16_meta_maestros",
       BG: "tareos_v16_bg",
+      THEME: "tareos_v16_theme",
       TAREO_PREFIX: "tareos_v16_tareo_",
       ASIS_PREFIX: "tareos_v16_asis_",
       RESUMEN_PREFIX: "tareos_v16_resumen_"
+    };
+
+    const CACHE_REP = {
+      REP_PREFIX: "tareos_v16_rep_",
+      REPD_PREFIX: "tareos_v16_repd_",
+      REPCONS_PREFIX: "tareos_v16_repcons_",
+      MAESTRO_PREFIX: "tareos_v16_maestro_"
     };
 
     const $ = id => document.getElementById(id);
@@ -1050,6 +1124,7 @@
 
     const localISO = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const isoManana = () => { const d = new Date(); d.setDate(d.getDate() + 1); return localISO(d); };
+    const isoHaceDias = (dias = 30) => { const d = new Date(); d.setDate(d.getDate() - dias); return localISO(d); };
     const hoyISO = () => localISO();
     const fmtDMY = iso => { const [y, m, d] = String(iso || "").split("-"); return d ? `${d}/${m}/${y}` : ""; };
 
@@ -1093,13 +1168,6 @@
       if (r.includes("ADMIN") || r === "ADMI") return "admin";
       if (r.includes("AUX")) return "auxiliar";
       return "supervisor";
-    }
-
-    function roleLabel(rol) {
-      const r = normalizeRole(rol);
-      if (r === "admin") return "ADMI (Todas las zonas y fundos)";
-      if (r === "auxiliar") return "Auxiliar (Zonas / Consolidados)";
-      return "Cosecha / Supervisor (1 Zona + Fundos)";
     }
 
     // =========================================================================
@@ -1192,7 +1260,8 @@
       vista: "mio",
       vistaInit: false,
       cons: null,
-      local: false
+      local: false,
+      historial: []
     });
 
     const S = {
@@ -1217,13 +1286,15 @@
         fecha: hoyISO(),
         filas: [],
         estado: "NUEVO",
-        dirty: false
+        dirty: false,
+        historial: []
       },
       asis: {
         fecha: hoyISO(),
         filas: [],
         estado: "NUEVO",
-        dirty: false
+        dirty: false,
+        historial: []
       },
       resumen: {
         desde: hoyISO(),
@@ -1243,20 +1314,26 @@
       }
     };
 
+    const isAdmin = () => S.rol === "admin" || S.pin === ADMIN_CODE;
+    const isAuxiliar = () => S.rol === "auxiliar";
+    const canViewConsolidated = () => isAdmin() || isAuxiliar();
+
     function resetUserWorkspaceState() {
       S.renderToken++;
-      S.activeTab = "tareo";
+      S.activeTab = canViewConsolidated() ? "resumen" : "tareo";
       S.tareo = {
         fecha: hoyISO(),
         filas: [],
         estado: "NUEVO",
-        dirty: false
+        dirty: false,
+        historial: []
       };
       S.asis = {
         fecha: hoyISO(),
         filas: [],
         estado: "NUEVO",
-        dirty: false
+        dirty: false,
+        historial: []
       };
       S.resumen = {
         desde: hoyISO(),
@@ -1271,10 +1348,6 @@
       };
     }
 
-    const isAdmin = () => S.rol === "admin" || S.pin === ADMIN_CODE;
-    const isAuxiliar = () => S.rol === "auxiliar";
-    const canViewConsolidated = () => isAdmin() || isAuxiliar();
-
     function rebuildIndexes() {
       S.personalMap = new Map();
       (S.personal || []).forEach(p => {
@@ -1286,6 +1359,26 @@
         const n = normK(l.nombre);
         if (n) S.laboresMap.set(n, String(l.codigo || "").trim());
       });
+    }
+
+    function applyBg(url) {
+      const layer = $("bg-layer");
+      if (!layer) return;
+      if (url && /^https?:\/\//i.test(url)) {
+        layer.style.backgroundImage = `url("${url.replace(/"/g, "%22")}")`;
+        document.body.classList.add("has-bg");
+      } else {
+        layer.style.backgroundImage = "none";
+        document.body.classList.remove("has-bg");
+      }
+    }
+
+    function applyTheme(mode) {
+      const isLight = mode === "light";
+      document.body.classList.toggle("light-theme", isLight);
+      store.setRaw(CACHE.THEME, isLight ? "light" : "dark");
+      const btn = $("btn-theme");
+      if (btn) btn.textContent = isLight ? "🌙 Oscuro" : "☀️ Claro";
     }
 
     function hydrateFromCache() {
@@ -1342,7 +1435,6 @@
 
     function recordBelongsToScope(rec) {
       if (isAdmin()) return true;
-      // Un supervisor solo ve sus propios registros; un auxiliar ve los de sus zonas/fundos asignados
       if (!canViewConsolidated()) {
         if (rec && rec.pin && String(rec.pin).trim() !== String(S.pin).trim()) return false;
       }
@@ -1380,7 +1472,7 @@
       if (acc === "login" || acc === "validarPin") {
         const pin = String(payload.pin || "").trim();
         const u = DEMO.users.find(x => String(x.pin) === pin);
-        if (!u) return { ok: false, error: "PIN no registrado en Demo (prueba 0104, 0403 o 0505)" };
+        if (!u) return { ok: false, error: "PIN no registrado en modo Demo" };
         return { ok: true, usuario: { ...u } };
       }
       if (acc === "getDatosIniciales" || acc === "syncMaestros") {
@@ -1473,7 +1565,7 @@
           try {
             data = JSON.parse(text);
           } catch (_) {
-            throw new Error("El script devolvió HTML o texto no válido (revisa permisos: Cualquier usuario)");
+            throw new Error("El script devolvió HTML o texto no válido");
           }
           return data;
         } catch (e) {
@@ -1486,7 +1578,6 @@
         let lastErr = null;
 
         if (!isWrite) {
-          // 1) Lecturas: GET simple sin headers personalizados (evita preflight CORS en Safari/iOS)
           try {
             const qs = encodeURIComponent(JSON.stringify(payload));
             const sep = SCRIPT_URL.includes("?") ? "&" : "?";
@@ -1500,7 +1591,6 @@
             lastErr = e1;
           }
 
-          // 2) Respaldo POST text/plain para lecturas
           try {
             const data = await fetchWithTimeout(SCRIPT_URL, {
               method: "POST",
@@ -1514,7 +1604,6 @@
             lastErr = e2;
           }
         } else {
-          // Escrituras: POST text/plain con redirect follow
           try {
             const data = await fetchWithTimeout(SCRIPT_URL, {
               method: "POST",
@@ -1534,10 +1623,43 @@
           : (lastErr && lastErr.message ? lastErr.message : "Error de red con Drive");
         setSyncStatus("Sin conexión a Drive (caché)", true);
         return { ok: false, offline: true, error: errMsg };
-      })();
+      })().finally(() => {
+        if (dedupKey) IN_FLIGHT.delete(dedupKey);
+      });
 
       if (dedupKey) IN_FLIGHT.set(dedupKey, run);
       return run;
+    }
+
+    function mergeUsersList(incoming) {
+      const map = new Map();
+      (S.users || []).forEach(u => {
+        if (u && u.pin) map.set(String(u.pin).trim(), u);
+      });
+      (incoming || []).forEach(u => {
+        if (!u || !u.pin) return;
+        const pin = String(u.pin).trim();
+        const prev = map.get(pin) || {};
+        const zonas = parseListField(u.zonas && u.zonas.length ? u.zonas : (u.zona || prev.zona));
+        const fundos = parseListField(u.fundos && u.fundos.length ? u.fundos : (u.fundo || prev.fundo));
+        map.set(pin, {
+          pin,
+          nombre: u.nombre || prev.nombre || `Usuario ${pin}`,
+          rol: normalizeRole(u.rol || u.perfil || prev.rol, pin),
+          zona: zonas.join(", ") || (pin === ADMIN_CODE ? "TODAS" : ""),
+          zonas: pin === ADMIN_CODE ? ["TODAS"] : zonas,
+          fundo: fundos.join(", ") || (pin === ADMIN_CODE ? "TODOS" : ""),
+          fundos: pin === ADMIN_CODE ? ["TODOS"] : fundos
+        });
+      });
+      if (!map.has(ADMIN_CODE)) {
+        map.set(ADMIN_CODE, {
+          pin: ADMIN_CODE, nombre: "Administrador Maestro", rol: "admin",
+          zona: "TODAS", zonas: ["TODAS"], fundo: "TODOS", fundos: ["TODOS"]
+        });
+      }
+      S.users = [...map.values()];
+      store.set(CACHE.USERS, S.users);
     }
 
     // =========================================================================
@@ -1546,7 +1668,7 @@
     async function refrescarUsuariosTiempoReal(silencioso = false) {
       if (S.demo) {
         mergeUsersList(DEMO.users);
-        if (!silencioso) toast(`✓ ${S.users.length} usuarios Demo listos`);
+        if (!silencioso) toast(`✓ ${S.users.length} usuarios listos`);
         return S.users;
       }
 
@@ -1619,7 +1741,6 @@
         api({ accion: "getMaestro", nombre: "zonas_fundos", pin: activePinAtStart })
       ]);
 
-      // Si el usuario cerró sesión o cambió durante la descarga, abortar sin mezclar estado
       if (S.pin !== activePinAtStart) return;
 
       if (rInit && rInit.ok) {
@@ -1665,54 +1786,20 @@
       }
     }
 
-    function mergeUsersList(incoming) {
-      const map = new Map();
-      (S.users || []).forEach(u => {
-        if (u && u.pin) map.set(String(u.pin).trim(), u);
-      });
-      (incoming || []).forEach(u => {
-        if (!u || !u.pin) return;
-        const pin = String(u.pin).trim();
-        const prev = map.get(pin) || {};
-        const zonas = parseListField(u.zonas && u.zonas.length ? u.zonas : (u.zona || prev.zona));
-        const fundos = parseListField(u.fundos && u.fundos.length ? u.fundos : (u.fundo || prev.fundo));
-        map.set(pin, {
-          pin,
-          nombre: u.nombre || prev.nombre || `Usuario ${pin}`,
-          rol: normalizeRole(u.rol || u.perfil || prev.rol, pin),
-          zona: zonas.join(", ") || (pin === ADMIN_CODE ? "TODAS" : ""),
-          zonas: pin === ADMIN_CODE ? ["TODAS"] : zonas,
-          fundo: fundos.join(", ") || (pin === ADMIN_CODE ? "TODOS" : ""),
-          fundos: pin === ADMIN_CODE ? ["TODOS"] : fundos
-        });
-      });
-      if (!map.has(ADMIN_CODE)) {
-        map.set(ADMIN_CODE, {
-          pin: ADMIN_CODE, nombre: "Administrador Maestro", rol: "admin",
-          zona: "TODAS", zonas: ["TODAS"], fundo: "TODOS", fundos: ["TODOS"]
-        });
-      }
-      S.users = [...map.values()];
-      store.set(CACHE.USERS, S.users);
-    }
-
     // =========================================================================
-    // BARRA SUPERIOR, FONDO PERSONALIZADO Y LOGIN CON ACTUALIZACIÓN AL TOQUE
+    // BARRA SUPERIOR Y PANTALLA DE ACCESO POR PIN (0ms)
     // =========================================================================
-    function applyBg(url) {
-      const clean = String(url || "").trim();
-      const layer = $("bg-layer");
-      if (!layer) return;
-      if (clean) {
-        layer.style.backgroundImage = `url("${clean.replace(/"/g, '\\"')}")`;
-        document.body.classList.add("has-bg");
-      } else {
-        layer.style.backgroundImage = "";
-        document.body.classList.remove("has-bg");
-      }
-    }
-
     function initTopbar() {
+      const savedTheme = store.getRaw(CACHE.THEME, "dark");
+      applyTheme(savedTheme);
+      const btnTheme = $("btn-theme");
+      if (btnTheme) {
+        btnTheme.onclick = () => {
+          const next = document.body.classList.contains("light-theme") ? "dark" : "light";
+          applyTheme(next);
+        };
+      }
+
       const btnScript = $("m-script");
       const btnDemo = $("m-demo");
       const paintMode = () => {
@@ -1739,7 +1826,7 @@
           renderShell();
           syncAllBackground(true);
         } else {
-          toast("Modo Demo activo: usa PIN 0104 (Admin), 0403 (Supervisor) o 0505 (Auxiliar)");
+          toast("Modo Demo activo: ingresa tu PIN asignado");
         }
       };
       paintMode();
@@ -1747,10 +1834,10 @@
 
     function applyUserSession(u) {
       const pin = String(u.pin || "").trim();
-      resetUserWorkspaceState();
       S.pin = pin;
       S.nombre = u.nombre || (pin === ADMIN_CODE ? "Administrador Maestro" : `Usuario ${pin}`);
       S.rol = normalizeRole(u.rol || u.perfil, pin);
+      resetUserWorkspaceState();
       const zonas = parseListField(u.zonas && u.zonas.length ? u.zonas : u.zona);
       const fundos = parseListField(u.fundos && u.fundos.length ? u.fundos : u.fundo);
       S.zonas = isAdmin() ? ["TODAS"] : zonas;
@@ -1770,16 +1857,13 @@
       const btn = $("btn-login");
       if (btn) { btn.disabled = true; btn.textContent = "..."; }
 
-      // 1) Buscar primero en la lista de usuarios cargada/refrescada
       let userHit = (S.users || []).find(u => String(u.pin).trim() === pin);
 
-      // 2) Si no está en memoria y estamos en modo Drive, descargar usuarios al toque
       if (!userHit && !S.demo) {
         await refrescarUsuariosTiempoReal(true);
         userHit = (S.users || []).find(u => String(u.pin).trim() === pin);
       }
 
-      // 3) Fallback directo contra el endpoint login del script
       if (!userHit) {
         const r = await api({ accion: "login", pin }, { timeout: 5000 });
         if (r && r.ok && r.usuario) {
@@ -1794,16 +1878,14 @@
         return toast("PIN no encontrado. Pulsa '↻ Actualizar usuarios' para traer usuarios nuevos.");
       }
 
-      // 4) Ingreso inmediato (0ms de espera para el usuario)
       applyUserSession(userHit);
       renderShell();
 
-      // 5) Todo lo demás (catálogos, personal, labores, ciclos) se descarga DESPUÉS en segundo plano
       setTimeout(() => {
         if (S.pin === pin) {
-          syncAllBackground(false);
+          syncAllBackground(true);
         }
-      }, 30);
+      }, 20);
     }
 
     function renderLogin() {
@@ -1830,7 +1912,7 @@
               ${["1","2","3","4","5","6","7","8","9","⌫","0","OK"].map(k => `<button type="button" data-k="${k}">${k}</button>`).join("")}
             </div>
             <div class="m" style="margin-top:12px;font-size:10.5px">
-              Cada usuario trabaja de forma independiente · Admin: <b>0104</b>
+              Acceso personal e independiente · Consulta tu PIN con el administrador
             </div>
           </div>
         </div>
@@ -1869,14 +1951,178 @@
 
       setTimeout(() => { try { inp.focus(); } catch (_) {} }, 50);
 
-      // Sincroniza usuarios silenciosamente al abrir la pantalla de PIN sin bloquear
       if (!S.demo) {
         refrescarUsuariosTiempoReal(true);
       }
     }
 
     // =========================================================================
-    // LECTURA DE EXCEL / CSV (XLSX)
+    // ESTRUCTURA PRINCIPAL Y PESTAÑAS (CONSOLIDADOS PRIMERO PARA ADMI/AUXILIAR)
+    // =========================================================================
+    function renderShell() {
+      const app = $("app");
+      const scope = getUserAllowedScope();
+      const scopeTxt = isAdmin() ? "Todas las zonas y fundos" : `${scope.zonas.join(", ")}${scope.fundos.length ? " · " + scope.fundos.join(", ") : ""}`;
+
+      const tabs = [];
+      if (canViewConsolidated()) {
+        tabs.push({ id: "resumen", label: "📊 Consolidados" });
+      }
+      tabs.push(
+        { id: "tareo", label: "📋 Tareo" },
+        { id: "asistencia", label: "👥 Asistencia" },
+        { id: "ajuste", label: "⚖️ Ajuste" },
+        { id: "proyeccion", label: "📈 Proyección" }
+      );
+
+      if (!tabs.some(t => t.id === S.activeTab)) {
+        S.activeTab = tabs[0].id;
+      }
+
+      app.innerHTML = `
+        <div class="wrap">
+          <div class="user-bar card">
+            <div class="user-info">
+              <div class="user-title">${esc(S.nombre)} <span class="badge b-role">${S.rol.toUpperCase()}</span></div>
+              <div class="user-sub">${esc(scopeTxt)}</div>
+            </div>
+            <div class="row" style="flex-shrink:0">
+              <button id="btn-folder-30d" type="button" class="btn btn-s btn-xs" title="Carpeta de tareos últimos 30 días">📁 30d</button>
+              <button id="btn-sync-global" type="button" class="btn btn-info btn-xs" title="Actualizar reportes y bases de datos desde Drive">↻ Actualizar</button>
+              <button id="btn-open-menu" type="button" class="btn btn-s btn-xs">☰ Menú</button>
+              <button id="btn-logout" type="button" class="btn btn-d btn-xs">Salir</button>
+            </div>
+          </div>
+
+          <div class="tabs" id="main-tabs">
+            ${tabs.map(t => `<button type="button" data-tab="${t.id}" class="${S.activeTab === t.id ? "active" : ""}">${t.label}</button>`).join("")}
+          </div>
+
+          <div id="pane-resumen" class="tab-pane ${S.activeTab === "resumen" ? "active-pane" : ""}"></div>
+          <div id="pane-tareo" class="tab-pane ${S.activeTab === "tareo" ? "active-pane" : ""}"></div>
+          <div id="pane-asistencia" class="tab-pane ${S.activeTab === "asistencia" ? "active-pane" : ""}"></div>
+          <div id="pane-ajuste" class="tab-pane ${S.activeTab === "ajuste" ? "active-pane" : ""}"></div>
+          <div id="pane-proyeccion" class="tab-pane ${S.activeTab === "proyeccion" ? "active-pane" : ""}"></div>
+        </div>
+      `;
+
+      $("btn-folder-30d").onclick = () => abrirCarpetaTareos30Dias();
+
+      $("btn-sync-global").onclick = async () => {
+        const b = $("btn-sync-global");
+        if (b) { b.disabled = true; b.innerHTML = `<span class="spinning">↻</span> Actualizando...`; }
+        safeStorage.keys().forEach(k => {
+          if (k.startsWith(CACHE.RESUMEN_PREFIX) || k.startsWith(CACHE_REP.REPCONS_PREFIX)) {
+            store.remove(k);
+          }
+        });
+        await Promise.all([
+          refrescarUsuariosTiempoReal(true),
+          syncAllBackground(true)
+        ]);
+        if (b) { b.disabled = false; b.textContent = "↻ Actualizar"; }
+        renderShell();
+        toast("✓ Bases de datos y reportes actualizados desde Drive");
+      };
+
+      $("btn-open-menu").onclick = () => openMenu(isAdmin() ? "usuarios" : "apariencia");
+      $("btn-logout").onclick = () => {
+        S.pin = "";
+        S.nombre = "";
+        resetUserWorkspaceState();
+        renderLogin();
+      };
+
+      $("main-tabs").onclick = e => {
+        const b = e.target.closest("[data-tab]");
+        if (!b) return;
+        S.activeTab = b.dataset.tab;
+        renderShell();
+      };
+
+      const token = ++S.renderToken;
+      if (S.activeTab === "resumen") renderConsolidados(token);
+      else if (S.activeTab === "tareo") renderTareo(token);
+      else if (S.activeTab === "asistencia") renderAsistencia(token);
+      else if (S.activeTab === "ajuste") abrirReporte("ajuste", token);
+      else if (S.activeTab === "proyeccion") abrirReporte("proyeccion", token);
+    }
+
+    // =========================================================================
+    // HISTORIAL DE ÚLTIMOS 30 DÍAS POR USUARIO (PARA EDITAR CUALQUIER ENVÍO)
+    // =========================================================================
+    function obtenerHistorialLocalUsuario(modulo, pin) {
+      const pfxMap = {
+        tareos: `${CACHE.TAREO_PREFIX}${S.demo ? "demo" : "live"}_`,
+        asistencia: `${CACHE.ASIS_PREFIX}${S.demo ? "demo" : "live"}_`,
+        ajuste: `${CACHE_REP.REPD_PREFIX}${S.demo ? "demo" : "live"}_ajuste_`,
+        proyeccion: `${CACHE_REP.REPD_PREFIX}${S.demo ? "demo" : "live"}_proyeccion_`
+      };
+      const pfx = pfxMap[modulo];
+      const desde = isoHaceDias(30);
+      const hasta = isoManana();
+      const map = new Map();
+
+      safeStorage.keys().forEach(k => {
+        if (!k.startsWith(pfx) || !k.endsWith("_" + pin)) return;
+        const rest = k.slice(pfx.length, k.length - ("_" + pin).length);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(rest)) return;
+        if (rest < desde || rest > hasta) return;
+        const obj = store.get(k, null);
+        if (obj && Array.isArray(obj.filas) && obj.filas.length) {
+          map.set(rest, {
+            fecha: rest,
+            pin,
+            fundo: obj.fundo || S.fundo || "",
+            filas: obj.filas
+          });
+        }
+      });
+      return [...map.values()];
+    }
+
+    async function cargarHistorial30DiasUsuario(modulo, pin) {
+      const desde = isoHaceDias(30);
+      const hasta = isoManana();
+      const locales = obtenerHistorialLocalUsuario(modulo, pin);
+      const map = new Map();
+      locales.forEach(item => map.set(item.fecha, item));
+
+      let r = null;
+      if (modulo === "tareos" || modulo === "asistencia") {
+        r = await api({ accion: "listarConsolidado", pin, tipo: modulo, desde, hasta }, { timeout: 6500 });
+      } else {
+        r = await repApi({ accion: "listarReportes", tipo: modulo, desde, hasta, pin });
+      }
+
+      if (r && r.ok && Array.isArray(r.data)) {
+        r.data.forEach(item => {
+          if (!item || String(item.pin || "").trim() !== String(pin).trim()) return;
+          if (!Array.isArray(item.filas) || !item.filas.length) return;
+          map.set(item.fecha, item);
+        });
+      }
+
+      return [...map.values()].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+    }
+
+    function resumenHistorialItemTxt(modulo, item) {
+      const filas = item.filas || [];
+      const fnd = item.fundo || (filas[0] && filas[0].fundo) || S.fundo || "Sin fundo";
+      if (modulo === "tareos") {
+        const hrs = filas.reduce((s, r) => s + toNum(r.horas), 0);
+        return `${fmtDMY(item.fecha)} · ${fnd} · ${filas.length} trab. (${hrs.toFixed(1).replace(/\.0$/, "")}h)`;
+      }
+      if (modulo === "asistencia") {
+        const pers = filas.reduce((s, r) => s + totalFilaAsis(r), 0);
+        return `${fmtDMY(item.fecha)} · ${fnd} · ${filas.length} grp (${pers} pers.)`;
+      }
+      const kg = filas.reduce((s, r) => s + calcKilos(r), 0);
+      return `${fmtDMY(item.fecha)} · ${fnd} · ${filas.length} fila(s) (${fmtKilos(kg)} kg)`;
+    }
+
+    // =========================================================================
+    // LECTOR DE ARCHIVOS EXCEL / CSV
     // =========================================================================
     function leerArchivoComoMatriz(file) {
       return new Promise((resolve, reject) => {
@@ -1910,8 +2156,8 @@
     }
 
     function closeMenu() {
-      $("menu-backdrop").style.display = "none";
-      $("menu-drawer").style.display = "none";
+      if ($("menu-backdrop")) $("menu-backdrop").style.display = "none";
+      if ($("menu-drawer")) $("menu-drawer").style.display = "none";
     }
 
     $("menu-backdrop").onclick = closeMenu;
@@ -1952,7 +2198,7 @@
 
         <div class="menu-sec-title">Apariencia y Caché</div>
         <button type="button" class="menu-item-btn ${S.menuSection === "apariencia" ? "active-menu" : ""}" data-msec="apariencia">
-          <span>🎨 Fondo y Sincronización</span><span>›</span>
+          <span>🎨 Tema, Fondo y Sincronización</span><span>›</span>
         </button>
 
         <div id="menu-body" style="margin-top:10px"></div>
@@ -2015,7 +2261,7 @@
         const rol = $("u-rol").value;
         const box = $("u-scope-box");
         if (rol === "admin") {
-          box.innerHTML = `<div class="m" style="color:#6ee7b7">✓ Abarca automáticamente <b>TODAS</b> las zonas y fundos.</div>`;
+          box.innerHTML = `<div class="m" style="color:var(--primary)">✓ Abarca automáticamente <b>TODAS</b> las zonas y fundos.</div>`;
           return;
         }
         if (rol === "supervisor") {
@@ -2222,14 +2468,14 @@
         list.innerHTML = (S.zonasFundos || []).map((z, zi) => `
           <div class="t-item">
             <div class="row sp" style="margin-bottom:5px">
-              <b style="color:#6ee7b7">📍 ${esc(z.zona)}</b>
+              <b style="color:var(--primary)">📍 ${esc(z.zona)}</b>
               <button type="button" class="btn btn-d btn-xs" data-zdel="${zi}">✕</button>
             </div>
             <div class="row" style="margin-bottom:6px">
               ${(z.fundos || []).map((f, fi) => `
                 <span class="badge b-new" style="display:inline-flex;align-items:center;gap:4px">
                   ${esc(f)}
-                  <button type="button" data-fdel="${zi}:${fi}" style="all:unset;cursor:pointer;color:#f87171;font-weight:800">✕</button>
+                  <button type="button" data-fdel="${zi}:${fi}" style="all:unset;cursor:pointer;color:var(--danger);font-weight:800">✕</button>
                 </span>
               `).join("") || `<span class="m">Sin fundos</span>`}
             </div>
@@ -2305,12 +2551,12 @@
       body.innerHTML = `
         <div class="card">
           <div style="font-weight:800;margin-bottom:4px">BD Personal (${S.personal.length} trabajadores)</div>
-          <p class="m" style="margin:0 0 8px">Sube el padrón de personal (.xlsx / .csv) con columnas <b>DNI</b>, <b>NOMBRES</b> (o Apellidos y Nombres) y <b>ESTADO</b>.</p>
+          <p class="m" style="margin:0 0 8px">Sube el padrón de personal (.xlsx / .csv) con columnas <b>DNI</b>, <b>NOMBRES</b> y <b>ESTADO</b>.</p>
           <label class="excel-drop" for="fp-file">
-            <div style="font-weight:800;color:#6ee7b7">🪪 Importar BD Personal (.xlsx / .csv)</div>
+            <div style="font-weight:800;color:var(--primary)">🪪 Importar BD Personal (.xlsx / .csv)</div>
           </label>
           <input type="file" id="fp-file" accept=".xlsx,.xls,.csv,.tsv" style="display:none" />
-          <div id="fp-st" class="m" style="font-weight:700;color:#6ee7b7"></div>
+          <div id="fp-st" class="m" style="font-weight:700;color:var(--primary)"></div>
         </div>
       `;
 
@@ -2411,8 +2657,14 @@
 
     function renderMenuApariencia(body) {
       const currentBg = store.getRaw(CACHE.BG, "");
+      const isLight = document.body.classList.contains("light-theme");
       body.innerHTML = `
         <div class="card">
+          <div style="font-weight:800;margin-bottom:4px">Tema de interfaz</div>
+          <div class="row" style="margin-bottom:10px">
+            <button id="th-dark" type="button" class="btn ${!isLight ? "" : "btn-s"} btn-xs" style="flex:1">🌙 Modo Oscuro</button>
+            <button id="th-light" type="button" class="btn ${isLight ? "" : "btn-s"} btn-xs" style="flex:1">☀️ Modo Claro</button>
+          </div>
           <div style="font-weight:800;margin-bottom:4px">Fondo personalizado</div>
           <input id="bg-url-in" placeholder="Pega URL de imagen https://..." value="${esc(currentBg)}" style="margin-bottom:6px" />
           <div class="row" style="margin-bottom:10px">
@@ -2425,6 +2677,9 @@
         </div>
       `;
 
+      $("th-dark").onclick = () => { applyTheme("dark"); renderMenuApariencia(body); };
+      $("th-light").onclick = () => { applyTheme("light"); renderMenuApariencia(body); };
+
       $("bg-apply").onclick = () => {
         const u = $("bg-url-in").value.trim();
         store.setRaw(CACHE.BG, u);
@@ -2432,105 +2687,124 @@
         toast("Fondo actualizado");
       };
       $("bg-clear").onclick = () => {
-        $("bg-url-in").value = "";
         store.remove(CACHE.BG);
+        $("bg-url-in").value = "";
         applyBg("");
         toast("Fondo restaurado");
       };
       $("cache-sync-now").onclick = async () => {
-        await refrescarUsuariosTiempoReal(true);
+        store.remove(CACHE.META_MAESTROS);
         await syncAllBackground(true);
-        toast("✓ Sincronización completada");
+        toast("✓ Maestros sincronizados con Drive");
       };
     }
 
     // =========================================================================
-    // ESTRUCTURA PRINCIPAL Y PESTAÑAS
-    // =========================================================================
-    function renderShell() {
-      const app = $("app");
-      const scope = getUserAllowedScope();
-      const scopeTxt = isAdmin() ? "Todas las zonas y fundos" : `${scope.zonas.join(", ")}${scope.fundos.length ? " · " + scope.fundos.join(", ") : ""}`;
-
-      const tabs = [
-        { id: "tareo", label: "📋 Tareo" },
-        { id: "asistencia", label: "👥 Asistencia" },
-        { id: "ajuste", label: "⚖️ Ajuste" },
-        { id: "proyeccion", label: "📈 Proyección" }
-      ];
-      if (canViewConsolidated()) {
-        tabs.push({ id: "resumen", label: "📊 Consolidados" });
-      }
-
-      if (!tabs.some(t => t.id === S.activeTab)) S.activeTab = "tareo";
-
-      app.innerHTML = `
-        <div class="wrap">
-          <div class="card user-bar">
-            <div class="user-info">
-              <div class="user-title">${esc(S.nombre)} <span class="badge b-role">${S.rol.toUpperCase()}</span></div>
-              <div class="user-sub">${esc(scopeTxt)}</div>
-            </div>
-            <div class="row" style="flex-shrink:0">
-              <button id="btn-open-menu" type="button" class="btn btn-s btn-xs">☰ Menú</button>
-              <button id="btn-logout" type="button" class="btn btn-d btn-xs">Salir</button>
-            </div>
-          </div>
-
-          <div class="tabs" id="main-tabs">
-            ${tabs.map(t => `<button type="button" data-tab="${t.id}" class="${S.activeTab === t.id ? "active" : ""}">${t.label}</button>`).join("")}
-          </div>
-
-          <div id="pane-tareo" class="tab-pane ${S.activeTab === "tareo" ? "active-pane" : ""}"></div>
-          <div id="pane-asistencia" class="tab-pane ${S.activeTab === "asistencia" ? "active-pane" : ""}"></div>
-          <div id="pane-ajuste" class="tab-pane ${S.activeTab === "ajuste" ? "active-pane" : ""}"></div>
-          <div id="pane-proyeccion" class="tab-pane ${S.activeTab === "proyeccion" ? "active-pane" : ""}"></div>
-          <div id="pane-resumen" class="tab-pane ${S.activeTab === "resumen" ? "active-pane" : ""}"></div>
-        </div>
-      `;
-
-      $("btn-open-menu").onclick = () => openMenu(isAdmin() ? "usuarios" : "apariencia");
-      $("btn-logout").onclick = () => {
-        S.pin = "";
-        S.nombre = "";
-        resetUserWorkspaceState();
-        renderLogin();
-      };
-
-      $("main-tabs").onclick = e => {
-        const b = e.target.closest("[data-tab]");
-        if (!b) return;
-        S.activeTab = b.dataset.tab;
-        renderShell();
-      };
-
-      const token = ++S.renderToken;
-      if (S.activeTab === "tareo") renderTareo(token);
-      else if (S.activeTab === "asistencia") renderAsistencia(token);
-      else if (S.activeTab === "ajuste") abrirReporte("ajuste", token);
-      else if (S.activeTab === "proyeccion") abrirReporte("proyeccion", token);
-      else if (S.activeTab === "resumen") renderConsolidados(token);
-    }
-
-    // =========================================================================
-    // MÓDULO 1: TAREO (AISLADO ESTRICTAMENTE POR S.pin + FECHA)
+    // MÓDULO 1: TAREO + CARPETA DE ÚLTIMOS 30 DÍAS
     // =========================================================================
     function nuevaFilaTareo() {
-      const defLab = S.labores[0] || { nombre: "COSECHA ARANDANO", codigo: "101" };
-      return { dni: "", nombre: "", estado: "", labor: defLab.nombre, codigo: defLab.codigo, horas: "8" };
+      const l0 = S.labores[0] || { nombre: "COSECHA ARANDANO", codigo: "101" };
+      return { dni: "", nombre: "", estado: "", labor: l0.nombre, codigo: l0.codigo, horas: "8" };
     }
 
-    function resolverTrabajadorPorDni(dniRaw) {
-      const dni = String(dniRaw || "").replace(/\D/g, "");
-      if (!dni) return null;
-      return S.personalMap.get(dni) || null;
+    function resolverTrabajadorPorDni(dni) {
+      const clean = String(dni || "").replace(/\D/g, "");
+      if (!clean) return null;
+      return S.personalMap.get(clean) || null;
     }
 
-    function resolverCodigoLabor(laborNombre, codigoPrev) {
-      const k = normK(laborNombre);
-      if (S.laboresMap.has(k)) return S.laboresMap.get(k);
-      const hit = S.labores.find(l => String(l.codigo) === String(codigoPrev));
-      return hit ? hit.codigo : (codigoPrev || "");
+    function resolverCodigoLabor(nombreLabor, codigoActual) {
+      const hit = S.laboresMap.get(normK(nombreLabor));
+      return hit || codigoActual || "";
+    }
+
+    async function abrirCarpetaTareos30Dias(forzarDrive = false) {
+      const modal = $("folder-modal");
+      const listEl = $("folder-list");
+      const subEl = $("folder-sub");
+      if (!modal || !listEl) return;
+
+      const activePin = S.pin;
+      const st = S.tareo;
+      modal.style.display = "flex";
+
+      const cerrar = () => { modal.style.display = "none"; };
+      $("folder-close").onclick = cerrar;
+      modal.onclick = e => { if (e.target === modal) cerrar(); };
+
+      const pintarListaCarpeta = hist => {
+        st.historial = hist || [];
+        if (subEl) subEl.textContent = `${st.historial.length} tareo(s) guardados en los últimos 30 días`;
+        if (!st.historial.length) {
+          listEl.innerHTML = `<div class="m" style="padding:18px 8px;text-align:center">No tienes tareos guardados en los últimos 30 días.</div>`;
+          return;
+        }
+        listEl.innerHTML = st.historial.map(h => {
+          const filas = h.filas || [];
+          const hrs = filas.reduce((s, r) => s + toNum(r.horas), 0);
+          const fnd = h.fundo || (filas[0] && filas[0].fundo) || S.fundo || "Sin fundo";
+          const isCurrent = h.fecha === st.fecha;
+          return `
+            <div class="folder-item ${isCurrent ? "active-item" : ""}">
+              <div style="min-width:0;flex:1">
+                <div style="font-weight:800;font-size:12px">📅 ${fmtDMY(h.fecha)} ${isCurrent ? `<span class="badge b-env">ABIERTO</span>` : ""}</div>
+                <div class="m" style="font-size:10.5px;margin-top:2px">
+                  <b>${esc(fnd)}</b> · ${filas.length} trab. · <b>${hrs.toFixed(1).replace(/\.0$/, "")}h</b>
+                </div>
+              </div>
+              <div class="row" style="flex-shrink:0">
+                <button type="button" class="btn btn-xs" data-fedit="${esc(h.fecha)}">✎ Editar</button>
+                <button type="button" class="btn btn-d btn-xs" data-fdel="${esc(h.fecha)}" title="Eliminar">✕</button>
+              </div>
+            </div>
+          `;
+        }).join("");
+
+        listEl.querySelectorAll("[data-fedit]").forEach(b => {
+          b.onclick = () => {
+            const fSel = b.dataset.fedit;
+            const hit = (st.historial || []).find(x => x.fecha === fSel);
+            st.fecha = fSel;
+            st.filas = hit && Array.isArray(hit.filas) ? hit.filas.map(x => ({ ...x })) : [];
+            st.dirty = false;
+            st.estado = st.filas.length ? "GUARDADO" : "NUEVO";
+            cerrar();
+            S.activeTab = "tareo";
+            renderShell();
+            toast(`✓ Tareo del ${fmtDMY(fSel)} abierto para editar`);
+          };
+        });
+
+        listEl.querySelectorAll("[data-fdel]").forEach(b => {
+          b.onclick = async () => {
+            const fDel = b.dataset.fdel;
+            if (!(await confirmar("Eliminar tareo", `¿Eliminar el tareo guardado del ${fmtDMY(fDel)}?`))) return;
+            const cKey = `${CACHE.TAREO_PREFIX}${S.demo ? "demo" : "live"}_${fDel}_${activePin}`;
+            store.remove(cKey);
+            await api({ accion: "guardarTareo", pin: activePin, usuario: S.nombre, fecha: fDel, filas: [] });
+            st.historial = (st.historial || []).filter(x => x.fecha !== fDel);
+            if (st.fecha === fDel) {
+              st.filas = [nuevaFilaTareo()];
+              st.estado = "NUEVO";
+              st.dirty = false;
+              if (S.activeTab === "tareo") renderTareo(++S.renderToken);
+            }
+            pintarListaCarpeta(st.historial);
+            toast("Tareo eliminado");
+          };
+        });
+      };
+
+      const locales = obtenerHistorialLocalUsuario("tareos", activePin)
+        .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+      pintarListaCarpeta(st.historial && st.historial.length && !forzarDrive ? st.historial : locales);
+
+      $("folder-refresh").onclick = () => abrirCarpetaTareos30Dias(true);
+
+      const histRemoto = await cargarHistorial30DiasUsuario("tareos", activePin);
+      if (S.pin === activePin && modal.style.display === "flex") {
+        pintarListaCarpeta(histRemoto);
+      }
     }
 
     function renderTareo(token) {
@@ -2553,20 +2827,22 @@
 
       pane.innerHTML = `
         <div class="card">
-          <div class="row sp" style="margin-bottom:4px">
+          <div class="row sp">
             <div class="row">
               <input type="date" id="tar-fecha" value="${st.fecha}" />
               ${badge}
             </div>
-            <span class="badge b-env">${esc(isAdmin() ? "TODAS" : (scope.fundos.join(", ") || S.zona))}</span>
+            <div class="row">
+              <button id="tar-folder-btn" type="button" class="btn btn-s btn-xs" title="Abrir carpeta de tareos (últimos 30 días)">📁 Carpeta (${(st.historial || []).length})</button>
+              <span class="badge b-env">${esc(isAdmin() ? "TODAS" : (scope.fundos.join(", ") || S.zona))}</span>
+            </div>
           </div>
-          <div class="m" style="font-size:10.5px">Digita DNI y Labor (código y nombre se completan solos desde Drive) o sube masivo <b>claude 1.xlsx</b>.</div>
         </div>
 
         <div class="masivo-banner">
           <div class="row sp" style="flex-wrap:nowrap">
             <div style="min-width:0;flex:1">
-              <div style="font-weight:800;font-size:12px;color:#6ee7b7">Masivo Tareo (claude 1.xlsx)</div>
+              <div style="font-weight:800;font-size:12px;color:var(--primary)">Masivo Tareo</div>
               <div class="m" style="font-size:10.5px">Columnas: C.LABOR, DNI, NOMBRES, HORAS</div>
             </div>
             <button id="tar-tpl" type="button" class="btn btn-s btn-xs">⬇ Plantilla</button>
@@ -2584,8 +2860,9 @@
           </div>
           <button id="tar-add" type="button" class="btn btn-s" style="width:100%">+ Agregar trabajador</button>
           <div class="row" style="margin-top:6px;gap:6px">
-            <button id="tar-save" type="button" class="btn" style="flex:1">Guardar Tareo en Drive</button>
+            <button id="tar-save" type="button" class="btn" style="flex:1">${st.estado === "GUARDADO" ? "Actualizar / Guardar en Drive" : "Guardar Tareo en Drive"}</button>
             <button id="tar-xls" type="button" class="btn btn-info">⬇ Excel</button>
+            ${st.estado === "GUARDADO" ? `<button id="tar-del" type="button" class="btn btn-d btn-xs">Borrar</button>` : ""}
           </div>
         </div>
       `;
@@ -2710,6 +2987,12 @@
         }
       };
 
+      $("tar-add").onclick = () => {
+        st.filas.push(nuevaFilaTareo());
+        marcarSucioTareo();
+        pintarFilasTareo();
+      };
+
       $("tar-fecha").onchange = e => {
         if (!e.target.value) return;
         st.fecha = e.target.value;
@@ -2719,19 +3002,14 @@
         renderTareo(++S.renderToken);
       };
 
-      $("tar-add").onclick = () => {
-        st.filas.push(nuevaFilaTareo());
-        marcarSucioTareo();
-        pintarFilasTareo();
-      };
+      $("tar-folder-btn").onclick = () => abrirCarpetaTareos30Dias();
 
       $("tar-tpl").onclick = () => {
         if (typeof XLSX === "undefined") return toast("Cargando librería Excel...");
-        const aoa = [
+        const ws = XLSX.utils.aoa_to_sheet([
           ["C.LABOR", "DNI", "NOMBRES", "HORAS"],
           ["101", "72345678", "PEREZ GOMEZ JUAN CARLOS", 8]
-        ];
-        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ]);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Tareo");
         XLSX.writeFile(wb, "Plantilla_Tareo_claude1.xlsx");
@@ -2804,24 +3082,41 @@
         btn.disabled = true;
         btn.textContent = "Guardando...";
         const scopeNow = getUserAllowedScope();
+        const fundoEnvio = scopeNow.fundos.join(", ") || S.fundo || "";
         const r = await api({
           accion: "guardarTareo",
           pin: activePin,
           usuario: S.nombre,
           rol: S.rol,
           zona: scopeNow.zonas.join(", "),
-          fundo: scopeNow.fundos.join(", "),
+          fundo: fundoEnvio,
           fecha: st.fecha,
           filas: valid
         });
         btn.disabled = false;
-        btn.textContent = "Guardar Tareo en Drive";
+        btn.textContent = "Actualizar / Guardar en Drive";
         st.dirty = false;
         st.estado = "GUARDADO";
-        store.set(cKey, { filas: valid, estado: "GUARDADO", dirty: false, ts: Date.now() });
-        if ($("tar-badge")) { $("tar-badge").className = "badge b-env"; $("tar-badge").textContent = "GUARDADO"; }
-        toast(r && r.ok ? "✓ Tareo guardado en Drive" : "⚠ Guardado en caché local");
+        store.set(cKey, { filas: valid, estado: "GUARDADO", fundo: fundoEnvio, dirty: false, ts: Date.now() });
+        cargarHistorial30DiasUsuario("tareos", activePin).then(h => {
+          if (S.pin === activePin) { st.historial = h; if (S.activeTab === "tareo") renderTareo(++S.renderToken); }
+        });
+        toast(r && r.ok ? "✓ Tareo guardado/actualizado en Drive" : "⚠ Guardado en caché local");
       };
+
+      if ($("tar-del")) {
+        $("tar-del").onclick = async () => {
+          if (!(await confirmar("Borrar tareo guardado", `¿Eliminar el tareo guardado del ${fmtDMY(st.fecha)}?`))) return;
+          store.remove(cKey);
+          await api({ accion: "guardarTareo", pin: activePin, usuario: S.nombre, fecha: st.fecha, filas: [] });
+          st.filas = [nuevaFilaTareo()];
+          st.estado = "NUEVO";
+          st.dirty = false;
+          st.historial = (st.historial || []).filter(x => x.fecha !== st.fecha);
+          renderTareo(++S.renderToken);
+          toast("Tareo eliminado");
+        };
+      }
 
       if (!cached || !cached.ts || (Date.now() - cached.ts) > MAESTRO_TTL_MS) {
         api({ accion: "getTareo", pin: activePin, fecha: st.fecha }).then(r => {
@@ -2829,16 +3124,22 @@
           if (r && r.ok && r.data && Array.isArray(r.data.filas) && r.data.filas.length) {
             st.filas = r.data.filas;
             st.estado = "GUARDADO";
-            store.set(cKey, { filas: st.filas, estado: "GUARDADO", dirty: false, ts: Date.now() });
-            pintarFilasTareo();
-            if ($("tar-badge")) { $("tar-badge").className = "badge b-env"; $("tar-badge").textContent = "GUARDADO"; }
+            store.set(cKey, { filas: st.filas, estado: "GUARDADO", fundo: r.data.fundo || "", dirty: false, ts: Date.now() });
+            renderTareo(token);
           }
         });
       }
+
+      cargarHistorial30DiasUsuario("tareos", activePin).then(hist => {
+        if (S.renderToken !== token || S.activeTab !== "tareo" || S.pin !== activePin) return;
+        st.historial = hist;
+        const fBtn = $("tar-folder-btn");
+        if (fBtn) fBtn.textContent = `📁 Carpeta (${hist.length})`;
+      });
     }
 
     // =========================================================================
-    // MÓDULO 2: ASISTENCIA (AISLADO ESTRICTAMENTE POR S.pin + FECHA)
+    // MÓDULO 2: ASISTENCIA (CON EDICIÓN COMPLETA E HISTORIAL 30 DÍAS)
     // =========================================================================
     function nuevaFilaAsis() {
       const fundos = repFundosDisponibles();
@@ -2874,24 +3175,31 @@
 
       const fundosDisp = repFundosDisponibles();
       const badge = st.dirty ? `<span id="as-badge" class="badge b-bor">SIN GUARDAR</span>`
-        : st.estado === "GUARDADO" ? `<span id="as-badge" class="badge b-env">GUARDADO</span>`
+        : st.estado === "GUARDADO" ? `<span id="as-badge" class="badge b-env">GUARDADO (EDITABLE)</span>`
         : `<span id="as-badge" class="badge b-new">NUEVO</span>`;
 
       pane.innerHTML = `
         <div class="card">
-          <div class="row sp" style="margin-bottom:4px">
+          <div class="row sp" style="margin-bottom:6px">
             <div class="row">
               <input type="date" id="as-fecha" value="${st.fecha}" />
               ${badge}
             </div>
-            <span class="m">Distribución diaria de personal</span>
+            <span class="m">Distribución diaria editable</span>
+          </div>
+          <div class="row" style="flex-wrap:nowrap">
+            <select id="as-hist-sel" style="flex:1;font-size:11px">
+              <option value="">📅 Mis asistencias (últimos 30 días)...</option>
+              ${(st.historial || []).map(h => `<option value="${esc(h.fecha)}" ${h.fecha === st.fecha ? "selected" : ""}>${esc(resumenHistorialItemTxt("asistencia", h))}</option>`).join("")}
+            </select>
+            <button id="as-hist-load" type="button" class="btn btn-s btn-xs">✎ Editar</button>
           </div>
         </div>
 
         <div class="masivo-banner">
           <div class="row sp" style="flex-wrap:nowrap">
             <div style="min-width:0;flex:1">
-              <div style="font-weight:800;font-size:12px;color:#6ee7b7">Masivo Asistencia (asistencia.xlsx)</div>
+              <div style="font-weight:800;font-size:12px;color:var(--primary)">Masivo Asistencia</div>
               <div class="m" style="font-size:10.5px">12 columnas · Omite filas de suma automáticamente</div>
             </div>
             <label for="as-file" class="btn">📥 Masivo</label>
@@ -2908,8 +3216,9 @@
           </div>
           <button id="as-add" type="button" class="btn btn-s" style="width:100%">+ Agregar grupo</button>
           <div class="row" style="margin-top:6px;gap:6px">
-            <button id="as-save" type="button" class="btn" style="flex:1">Guardar Asistencia en Drive</button>
+            <button id="as-save" type="button" class="btn" style="flex:1">${st.estado === "GUARDADO" ? "Actualizar / Guardar en Drive" : "Guardar Asistencia en Drive"}</button>
             <button id="as-xls" type="button" class="btn btn-info">⬇ Excel</button>
+            ${st.estado === "GUARDADO" ? `<button id="as-del" type="button" class="btn btn-d btn-xs">Borrar</button>` : ""}
           </div>
         </div>
       `;
@@ -2992,6 +3301,12 @@
         pintarAsis();
       };
 
+      $("as-add").onclick = () => {
+        st.filas.push(nuevaFilaAsis());
+        marcarSucioAsis();
+        pintarAsis();
+      };
+
       $("as-fecha").onchange = e => {
         if (!e.target.value) return;
         st.fecha = e.target.value;
@@ -3001,11 +3316,19 @@
         renderAsistencia(++S.renderToken);
       };
 
-      $("as-add").onclick = () => {
-        st.filas.push(nuevaFilaAsis());
-        marcarSucioAsis();
-        pintarAsis();
+      const abrirFechaAsisHistorial = fSel => {
+        if (!fSel) return toast("Selecciona una asistencia del historial de 30 días");
+        st.fecha = fSel;
+        const hit = (st.historial || []).find(x => x.fecha === fSel);
+        st.filas = hit && Array.isArray(hit.filas) ? hit.filas.map(x => ({ ...x })) : [];
+        st.dirty = false;
+        st.estado = st.filas.length ? "GUARDADO" : "NUEVO";
+        renderAsistencia(++S.renderToken);
+        toast(`✓ Asistencia del ${fmtDMY(fSel)} lista para editar`);
       };
+
+      $("as-hist-sel").onchange = e => { if (e.target.value) abrirFechaAsisHistorial(e.target.value); };
+      $("as-hist-load").onclick = () => abrirFechaAsisHistorial($("as-hist-sel").value);
 
       $("as-file").onchange = async e => {
         const f = e.target.files[0];
@@ -3069,24 +3392,41 @@
         btn.disabled = true;
         btn.textContent = "Guardando...";
         const scopeNow = getUserAllowedScope();
+        const fundoEnvio = (st.filas[0] && st.filas[0].fundo) || scopeNow.fundos.join(", ") || S.fundo || "";
         const r = await api({
           accion: "guardarAsistencia",
           pin: activePin,
           usuario: S.nombre,
           rol: S.rol,
           zona: scopeNow.zonas.join(", "),
-          fundo: scopeNow.fundos.join(", "),
+          fundo: fundoEnvio,
           fecha: st.fecha,
           filas: st.filas
         });
         btn.disabled = false;
-        btn.textContent = "Guardar Asistencia en Drive";
+        btn.textContent = "Actualizar / Guardar en Drive";
         st.dirty = false;
         st.estado = "GUARDADO";
-        store.set(cKey, { filas: st.filas, estado: "GUARDADO", dirty: false, ts: Date.now() });
-        if ($("as-badge")) { $("as-badge").className = "badge b-env"; $("as-badge").textContent = "GUARDADO"; }
-        toast(r && r.ok ? "✓ Asistencia guardada en Drive" : "⚠ Guardado en caché local");
+        store.set(cKey, { filas: st.filas, estado: "GUARDADO", fundo: fundoEnvio, dirty: false, ts: Date.now() });
+        cargarHistorial30DiasUsuario("asistencia", activePin).then(h => {
+          if (S.pin === activePin) { st.historial = h; if (S.activeTab === "asistencia") renderAsistencia(++S.renderToken); }
+        });
+        toast(r && r.ok ? "✓ Asistencia guardada/actualizada en Drive" : "⚠ Guardado en caché local");
       };
+
+      if ($("as-del")) {
+        $("as-del").onclick = async () => {
+          if (!(await confirmar("Borrar asistencia guardada", `¿Eliminar la asistencia guardada del ${fmtDMY(st.fecha)}?`))) return;
+          store.remove(cKey);
+          await api({ accion: "guardarAsistencia", pin: activePin, usuario: S.nombre, fecha: st.fecha, filas: [] });
+          st.filas = [nuevaFilaAsis()];
+          st.estado = "NUEVO";
+          st.dirty = false;
+          st.historial = (st.historial || []).filter(x => x.fecha !== st.fecha);
+          renderAsistencia(++S.renderToken);
+          toast("Asistencia eliminada");
+        };
+      }
 
       if (!cached || !cached.ts || (Date.now() - cached.ts) > MAESTRO_TTL_MS) {
         api({ accion: "getAsistencia", pin: activePin, fecha: st.fecha }).then(r => {
@@ -3094,33 +3434,42 @@
           if (r && r.ok && r.data && Array.isArray(r.data.filas) && r.data.filas.length) {
             st.filas = r.data.filas;
             st.estado = "GUARDADO";
-            store.set(cKey, { filas: st.filas, estado: "GUARDADO", dirty: false, ts: Date.now() });
-            pintarAsis();
-            if ($("as-badge")) { $("as-badge").className = "badge b-env"; $("as-badge").textContent = "GUARDADO"; }
+            store.set(cKey, { filas: st.filas, estado: "GUARDADO", fundo: r.data.fundo || "", dirty: false, ts: Date.now() });
+            renderAsistencia(token);
           }
         });
       }
+
+      cargarHistorial30DiasUsuario("asistencia", activePin).then(hist => {
+        if (S.renderToken !== token || S.activeTab !== "asistencia" || S.pin !== activePin) return;
+        st.historial = hist;
+        const sel = $("as-hist-sel");
+        if (sel) {
+          sel.innerHTML = `<option value="">📅 Mis asistencias (últimos 30 días: ${hist.length})...</option>` +
+            hist.map(h => `<option value="${esc(h.fecha)}" ${h.fecha === st.fecha ? "selected" : ""}>${esc(resumenHistorialItemTxt("asistencia", h))}</option>`).join("");
+        }
+      });
     }
 
     // =========================================================================
-    // MÓDULO 3 Y 4: AJUSTE Y PROYECCIÓN (AISLADOS POR S.pin EN INGRESO)
+    // MÓDULO 3 Y 4: AJUSTE Y PROYECCIÓN (EDICIÓN + HISTORIAL 30 DÍAS + FUNDO)
     // =========================================================================
     const REP_CFG = {
       ajuste: {
         titulo: "Ajuste",
-        fechaAuto: true,
-        nota: "Fecha automática (hoy). Columnas naranjas en ingreso manual; Semana, Tipo (Cosecha) y Responsable van automáticos al consolidado."
+        fechaAuto: false,
+        nota: "Fecha inicial hoy (puedes cambiar fecha o abrir envíos de los últimos 30 días para editarlos). Semana y Tipo van automáticos."
       },
       proyeccion: {
         titulo: "Proyección",
         fechaAuto: false,
-        nota: "Fecha predeterminada mañana (+1 día, modificable). Semana, Tipo (Cosecha), Formato y Destino van ocultos hasta el consolidado."
+        nota: "Fecha inicial mañana (+1 día, editable). Puedes abrir y editar cualquier envío guardado de los últimos 30 días."
       }
     };
 
     const REP_COLS = {
-      ajuste: ["semana", "fecha", "tipo", "fundo", "modulo", "variedad", "ciclo", "responsable", "formato", "destino", "dias", "ha", "kgHa", "jornales", "kilos", "kgJor"],
-      proyeccion: ["semana", "fecha", "tipo", "fundo", "modulo", "variedad", "ciclo", "responsable", "formato", "destino", "dias", "ha", "kgHa", "jornales", "kilos", "kgJor"]
+      ajuste: ["semana", "fecha", "tipo", "fundo", "modulo", "variedad", "ciclo", "formato", "destino", "dias", "ha", "kgHa", "jornales", "kilos", "kgJor"],
+      proyeccion: ["semana", "fecha", "tipo", "fundo", "modulo", "variedad", "ciclo", "formato", "destino", "dias", "ha", "kgHa", "jornales", "kilos", "kgJor"]
     };
 
     const REP_USER_FIELDS = {
@@ -3130,16 +3479,9 @@
 
     const REP_LABEL = {
       semana: "Semana", fecha: "Fecha", tipo: "Tipo", fundo: "Fundo", modulo: "Módulo", variedad: "Variedad",
-      ciclo: "Ciclo", responsable: "Responsable", formato: "Formato", destino: "Destino",
+      ciclo: "Ciclo", formato: "Formato", destino: "Destino",
       dias: "Días de Reingreso", ha: "Ha", kgHa: "Kg/Ha", jornales: "Jornales (Cosechador)",
       kilos: "Kilos", kgJor: "Kg/Jornales"
-    };
-
-    const CACHE_REP = {
-      REP_PREFIX: "tareos_v16_rep_",
-      REPD_PREFIX: "tareos_v16_repd_",
-      REPCONS_PREFIX: "tareos_v16_repcons_",
-      MAESTRO_PREFIX: "tareos_v16_maestro_"
     };
 
     const calcKilos = r => toNum(r.ha) * toNum(r.kgHa);
@@ -3391,7 +3733,6 @@
         case "semana": return isoWeek(r.fecha);
         case "fecha": return fmtDMY(r.fecha);
         case "tipo": return "Cosecha";
-        case "responsable": return r.usuario || "";
         case "formato":
         case "destino": return r[c] || "";
         case "modulo": return modKey(r.modulo) !== "" && Number.isFinite(Number(r.modulo)) ? Number(r.modulo) : (r.modulo || "");
@@ -3409,7 +3750,7 @@
       const aoa = [cols.map(c => REP_LABEL[c])];
       filas.forEach(r => aoa.push(cols.map(c => repValorCol(tipo, c, r))));
       const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws["!cols"] = cols.map(c => ({ wch: c === "jornales" || c === "dias" ? 20 : (c === "variedad" || c === "responsable" ? 18 : 12) }));
+      ws["!cols"] = cols.map(c => ({ wch: c === "jornales" || c === "dias" ? 20 : (c === "variedad" || c === "fundo" ? 18 : 12) }));
       const fmt = { kilos: "#,##0", kgJor: "0.0", ha: "0.00" };
       cols.forEach((c, ci) => {
         if (!fmt[c]) return;
@@ -3635,7 +3976,7 @@
 
       const colWidths = cols.map(c => ({
         semana: 58, fecha: 82, tipo: 68, fundo: 98, modulo: 58, variedad: 108,
-        ciclo: 52, responsable: 118, formato: 86, destino: 74, dias: 72,
+        ciclo: 52, formato: 86, destino: 74, dias: 72,
         ha: 64, kgHa: 74, jornales: 68, kilos: 84, kgJor: 76
       }[c] || 76));
 
@@ -3670,30 +4011,30 @@
       const ctx = canvas.getContext("2d");
       ctx.scale(2, 2);
 
-      ctx.fillStyle = "#080f0b";
+      ctx.fillStyle = "#0f172a";
       ctx.fillRect(0, 0, width, height);
 
       ctx.fillStyle = "#10b981";
       ctx.fillRect(padX, padY, width - padX * 2, 34);
-      ctx.fillStyle = "#031a0f";
-      ctx.font = "800 14px Inter, -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillStyle = "#042f2e";
+      ctx.font = "800 14px -apple-system, BlinkMacSystemFont, sans-serif";
       const fechaTitulo = tituloExtra || fmtDMY(S.rep[tipo].fecha);
       ctx.fillText(`${APP_NAME}  ·  ${cfg.titulo.toUpperCase()}  ·  ${fechaTitulo}`, padX + 12, padY + 22);
 
       ctx.fillStyle = "#a7f3d0";
-      ctx.font = "700 11.5px Inter, -apple-system, BlinkMacSystemFont, sans-serif";
-      const subLinea = `Responsable: ${S.nombre || S.fundo}   |   Ha: ${totHa.toFixed(2)}   |   Kilos: ${fmtKilos(totKilos)}   |   Jornales: ${totJor.toLocaleString("en-US")}   |   Kg/Jornal: ${fmtKgJor(promKgJor)}`;
+      ctx.font = "700 11.5px -apple-system, BlinkMacSystemFont, sans-serif";
+      const subLinea = `Usuario: ${S.nombre || S.fundo}   |   Ha: ${totHa.toFixed(2)}   |   Kilos: ${fmtKilos(totKilos)}   |   Jornales: ${totJor.toLocaleString("en-US")}   |   Kg/Jornal: ${fmtKgJor(promKgJor)}`;
       ctx.fillText(subLinea, padX, padY + 52);
 
       const yHead = padY + titleH;
-      ctx.fillStyle = "#14241c";
+      ctx.fillStyle = "#1e293b";
       ctx.fillRect(padX, yHead, width - padX * 2, headH);
       let xCursor = padX;
-      ctx.font = "700 10px Inter, -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.font = "700 10px -apple-system, BlinkMacSystemFont, sans-serif";
       headerLabels.forEach((h, idx) => {
         const colKey = cols[idx];
         const isHiddenCol = !REP_USER_FIELDS[tipo].includes(colKey);
-        ctx.fillStyle = isHiddenCol ? "#7dd3fc" : "#6ee7b7";
+        ctx.fillStyle = isHiddenCol ? "#38bdf8" : "#34d399";
         ctx.fillText(h, xCursor + 6, yHead + 21);
         xCursor += colWidths[idx];
       });
@@ -3701,10 +4042,10 @@
       allRows.forEach((r, rIdx) => {
         const yRow = yHead + headH + rIdx * rowH;
         const isTot = rIdx === allRows.length - 1;
-        ctx.fillStyle = isTot ? "#064e3b" : (rIdx % 2 === 0 ? "#0e1712" : "#131f18");
+        ctx.fillStyle = isTot ? "#064e3b" : (rIdx % 2 === 0 ? "#0f172a" : "#1e293b");
         ctx.fillRect(padX, yRow, width - padX * 2, rowH);
 
-        ctx.strokeStyle = isTot ? "rgba(52, 211, 153, 0.55)" : "rgba(255, 255, 255, 0.06)";
+        ctx.strokeStyle = isTot ? "rgba(52, 211, 153, 0.55)" : "rgba(255, 255, 255, 0.08)";
         ctx.lineWidth = isTot ? 1.2 : 0.6;
         ctx.beginPath();
         ctx.moveTo(padX, yRow);
@@ -3715,10 +4056,10 @@
         r.forEach((val, cIdx) => {
           const colKey = cols[cIdx];
           const isCalc = colKey === "kilos" || colKey === "kgJor";
-          ctx.fillStyle = isTot ? "#ecfdf5" : (isCalc ? "#34d399" : "#e5f2ea");
+          ctx.fillStyle = isTot ? "#ecfdf5" : (isCalc ? "#34d399" : "#f8fafc");
           ctx.font = (isTot || isCalc || colKey === "fundo" || colKey === "variedad")
-            ? "700 10.5px Inter, -apple-system, BlinkMacSystemFont, sans-serif"
-            : "500 10.5px Inter, -apple-system, BlinkMacSystemFont, sans-serif";
+            ? "700 10.5px -apple-system, BlinkMacSystemFont, sans-serif"
+            : "500 10.5px -apple-system, BlinkMacSystemFont, sans-serif";
           ctx.fillText(String(val ?? "").slice(0, 19), cx + 6, yRow + 19);
           cx += colWidths[cIdx];
         });
@@ -3728,7 +4069,7 @@
       const fileSlug = `${cfg.titulo}_${(tituloExtra || S.rep[tipo].fecha).replace(/[^0-9A-Za-z_-]/g, "_")}.png`;
       abrirModalImagen(
         `Vista previa · ${cfg.titulo}`,
-        `Incluye todas las columnas (Semana, Tipo, Responsable, Formato, Destino) y totales`,
+        `Incluye todas las columnas (Semana, Tipo, Fundo, Formato, Destino) y totales`,
         dataUrl,
         fileSlug
       );
@@ -3741,20 +4082,27 @@
       const scope = getUserAllowedScope();
       if (!st.filas.length) st.filas = [repNuevaFila()];
       const badge = st.dirty ? `<span id="rep-badge" class="badge b-bor">SIN GUARDAR</span>`
-        : st.estado === "GUARDADO" ? `<span id="rep-badge" class="badge b-env">GUARDADO</span>`
+        : st.estado === "GUARDADO" ? `<span id="rep-badge" class="badge b-env">GUARDADO (EDITABLE)</span>`
         : `<span id="rep-badge" class="badge b-new">NUEVO</span>`;
 
       body.innerHTML = `
         <div class="card">
           <div class="row sp" style="margin-bottom:6px">
             <div class="row">
-              <input type="date" id="rep-fecha" value="${st.fecha}" ${cfg.fechaAuto ? "disabled" : ""} />
+              <input type="date" id="rep-fecha" value="${st.fecha}" />
               ${badge}
             </div>
             <div class="row">
               <button id="rep-img-prev" type="button" class="btn btn-info btn-xs">🖼 Vista previa / Imagen</button>
               <span class="badge b-env">${esc(isAdmin() ? "TODAS" : (scope.zonas.join(", ") || S.zona))}</span>
             </div>
+          </div>
+          <div class="row" style="flex-wrap:nowrap;margin-bottom:5px">
+            <select id="rep-hist-sel" style="flex:1;font-size:11px">
+              <option value="">📅 Mis envíos de ${cfg.titulo} (últimos 30 días)...</option>
+              ${(st.historial || []).map(h => `<option value="${esc(h.fecha)}" ${h.fecha === st.fecha ? "selected" : ""}>${esc(resumenHistorialItemTxt(tipo, h))}</option>`).join("")}
+            </select>
+            <button id="rep-hist-load" type="button" class="btn btn-s btn-xs">✎ Editar</button>
           </div>
           <div class="m" style="font-size:10.5px">${cfg.nota}</div>
           ${S.M.ciclos.length ? "" : `<div class="warn-txt" style="margin-top:4px">⚠ Aún no hay BD de ciclos cargada: Fundo, Módulo y Variedad se escriben a mano.</div>`}
@@ -3763,7 +4111,7 @@
         <div class="masivo-banner">
           <div class="row sp" style="flex-wrap:nowrap">
             <div style="min-width:0;flex:1">
-              <div style="font-weight:800;font-size:12px;color:#6ee7b7">Carga masiva de ${cfg.titulo}</div>
+              <div style="font-weight:800;font-size:12px;color:var(--primary)">Carga masiva de ${cfg.titulo}</div>
               <div class="m" style="font-size:10.5px">Plantilla naranja (campos de ingreso manual) o completa</div>
             </div>
             <button id="rep-plantilla" type="button" class="btn btn-s btn-xs" style="flex-shrink:0">⬇ Plantilla</button>
@@ -3778,7 +4126,7 @@
         <div class="card">
           <button id="rep-add" type="button" class="btn btn-s" style="width:100%">+ Agregar fila</button>
           <div class="row" style="margin-top:6px;gap:6px">
-            <button id="rep-save" type="button" class="btn" style="flex:1">Guardar en Drive</button>
+            <button id="rep-save" type="button" class="btn" style="flex:1">${st.estado === "GUARDADO" ? "Actualizar / Guardar en Drive" : "Guardar en Drive"}</button>
             ${st.estado === "GUARDADO" ? `<button id="rep-del" type="button" class="btn btn-d">Borrar guardado</button>` : ""}
           </div>
         </div>
@@ -3787,6 +4135,22 @@
       pintarRepFilas(tipo);
       $("rep-img-prev").onclick = () => exportarReporteImagenPreview(tipo, st.filas, fmtDMY(st.fecha));
       $("rep-fecha").onchange = e => { if (e.target.value) repCambiarFecha(tipo, e.target.value); };
+      $("rep-hist-sel").onchange = e => { if (e.target.value) repCambiarFecha(tipo, e.target.value); };
+      $("rep-hist-load").onclick = () => {
+        const fSel = $("rep-hist-sel").value;
+        if (!fSel) return toast("Selecciona una fecha del historial de 30 días");
+        repCambiarFecha(tipo, fSel);
+      };
+
+      cargarHistorial30DiasUsuario(tipo, S.pin).then(hist => {
+        if (S.activeTab !== tipo || st.vista !== "mio") return;
+        st.historial = hist;
+        const sel = $("rep-hist-sel");
+        if (sel) {
+          sel.innerHTML = `<option value="">📅 Mis envíos de ${cfg.titulo} (últimos 30 días: ${hist.length})...</option>` +
+            hist.map(h => `<option value="${esc(h.fecha)}" ${h.fecha === st.fecha ? "selected" : ""}>${esc(resumenHistorialItemTxt(tipo, h))}</option>`).join("");
+        }
+      });
 
       $("rep-add").onclick = () => {
         st.filas.push(repNuevaFila());
@@ -3824,6 +4188,7 @@
         btn.disabled = true;
         btn.textContent = "Guardando...";
         const scopeNow = getUserAllowedScope();
+        const fundoEnvio = (validas[0] && validas[0].fundo) || scopeNow.fundos.join(", ") || S.fundo || "";
         const r = await repApi({
           accion: "guardarReporte",
           tipo,
@@ -3831,17 +4196,17 @@
           pin: S.pin,
           usuario: S.nombre,
           zona: scopeNow.zonas.join(", "),
-          fundo: scopeNow.fundos.join(", "),
+          fundo: fundoEnvio,
           filas: validas
         });
         btn.disabled = false;
-        btn.textContent = "Guardar en Drive";
+        btn.textContent = "Actualizar / Guardar en Drive";
         st.filas = validas;
         st.dirty = false;
         st.estado = "GUARDADO";
-        store.set(repCacheKey(tipo, st.fecha), { filas: validas, estado: "GUARDADO", dirty: false, ts: Date.now() });
+        store.set(repCacheKey(tipo, st.fecha), { filas: validas, estado: "GUARDADO", fundo: fundoEnvio, dirty: false, ts: Date.now() });
         renderRepIngreso(tipo);
-        toast(repMsgGuardado(r, `✓ ${cfg.titulo} guardado en Drive`));
+        toast(repMsgGuardado(r, `✓ ${cfg.titulo} guardado/actualizado en Drive`));
       };
 
       if ($("rep-del")) {
@@ -4014,11 +4379,11 @@
           <div style="font-weight:800;margin-bottom:4px">BD Ciclos, Formatos y Destinos (Última versión)</div>
           <p class="m" style="margin:0 0 8px">Al subir una nueva BD de ciclos se reemplaza la anterior en <b>02_Bases_De_Datos</b>. Ciclos actuales: <b id="mc-n">${S.M.ciclos.length}</b>.</p>
           <label class="excel-drop" for="fc">
-            <div style="font-weight:800;color:#6ee7b7;font-size:12px">🌾 Subir nueva BD Ciclos (.xlsx / .xls / .csv)</div>
+            <div style="font-weight:800;color:var(--primary);font-size:12px">🌾 Subir nueva BD Ciclos (.xlsx / .xls / .csv)</div>
             <div class="m" style="font-size:10.5px;margin-top:2px">Columnas: Zona, Fundo, Variedad, Módulo, Área y Ciclo</div>
           </label>
           <input type="file" id="fc" accept=".xlsx,.xls,.csv,.tsv,.txt" style="display:none" />
-          <div id="mc-s" class="m" style="font-weight:700;color:#6ee7b7;margin-bottom:8px"></div>
+          <div id="mc-s" class="m" style="font-weight:700;color:var(--primary);margin-bottom:8px"></div>
 
           <div style="font-weight:700;font-size:11.5px;margin:8px 0 4px">Formatos (desplegable en Ajuste)</div>
           <div id="mf-chips" class="row" style="margin-bottom:6px"></div>
@@ -4042,7 +4407,7 @@
         if (!el) return;
         const arr = S.M[key];
         el.innerHTML = arr.length
-          ? arr.map((v, i) => `<span class="badge b-new" style="display:inline-flex;align-items:center;gap:4px">${esc(v)} <button type="button" data-k="${key}" data-i="${i}" style="all:unset;cursor:pointer;color:#f87171;font-weight:800">✕</button></span>`).join("")
+          ? arr.map((v, i) => `<span class="badge b-new" style="display:inline-flex;align-items:center;gap:4px">${esc(v)} <button type="button" data-k="${key}" data-i="${i}" style="all:unset;cursor:pointer;color:var(--danger);font-weight:800">✕</button></span>`).join("")
           : `<span class="m">Sin elementos</span>`;
         el.querySelectorAll("button").forEach(b => {
           b.onclick = async () => {
@@ -4095,7 +4460,7 @@
     }
 
     // =========================================================================
-    // MÓDULO 5: CONSOLIDADOS GLOBALES (FILTRADOS POR ZONA/FUNDO DEL USUARIO)
+    // MÓDULO 5: CONSOLIDADOS GLOBALES (TAREOS, ASISTENCIA, AJUSTE Y PROYECCIÓN)
     // =========================================================================
     async function renderConsolidados(token) {
       const pane = $("pane-resumen");
@@ -4103,21 +4468,29 @@
       const rs = S.resumen;
       const activePin = S.pin;
 
+      const tiposConsolidado = [
+        { id: "tareos", label: "📋 Tareos" },
+        { id: "asistencia", label: "👥 Asistencia" },
+        { id: "ajuste", label: "⚖️ Ajuste" },
+        { id: "proyeccion", label: "📈 Proyección" }
+      ];
+
       pane.innerHTML = `
         <div class="card">
+          <div class="tabs" id="res-tipo-btns" style="margin-bottom:8px">
+            ${tiposConsolidado.map(t => `<button type="button" data-rtipo="${t.id}" class="${rs.tipo === t.id ? "active" : ""}">${t.label}</button>`).join("")}
+          </div>
           <div class="row sp" style="margin-bottom:6px">
             <div class="row">
-              <select id="res-tipo" style="width:auto">
-                <option value="tareos" ${rs.tipo === "tareos" ? "selected" : ""}>Tareos (claude 1.xlsx)</option>
-                <option value="asistencia" ${rs.tipo === "asistencia" ? "selected" : ""}>Asistencia (asistencia.xlsx)</option>
-              </select>
               <input type="date" id="res-desde" value="${rs.desde}" />
               <span class="m">a</span>
               <input type="date" id="res-hasta" value="${rs.hasta}" />
             </div>
             <div class="row">
               <button id="res-go" type="button" class="btn btn-xs">Consultar</button>
+              <button id="res-refresh-all" type="button" class="btn btn-w btn-xs">↻ Actualizar todo</button>
               <button id="res-xls" type="button" class="btn btn-info btn-xs">⬇ Excel</button>
+              <button id="res-xls-all" type="button" class="btn btn-s btn-xs">⬇ Todo Excel</button>
             </div>
           </div>
           <div id="res-st" class="m"></div>
@@ -4125,18 +4498,21 @@
         <div id="res-body"></div>
       `;
 
-      const pintarTabla = () => {
-        const body = $("res-body");
-        if (!body) return;
-        const filtrados = (rs.data || []).filter(item => recordBelongsToScope({ fundo: item.fundo, zona: item.zona, pin: item.pin }));
+      const obtenerFundoUsuario = pin => {
+        const u = (S.users || []).find(x => String(x.pin).trim() === String(pin || "").trim());
+        return u && u.fundo ? u.fundo : "";
+      };
 
-        if (rs.tipo === "tareos") {
-          const rows = [];
-          filtrados.forEach(env => {
+      const construirFilasTareos = raw => {
+        const rows = [];
+        (raw || [])
+          .filter(item => recordBelongsToScope({ fundo: item.fundo, zona: item.zona, pin: item.pin }))
+          .forEach(env => {
+            const fundoEnv = env.fundo || obtenerFundoUsuario(env.pin) || env.zona || "";
             (env.filas || []).forEach(f => {
               rows.push({
                 fecha: env.fecha,
-                usuario: env.usuario || "",
+                fundo: f.fundo || fundoEnv,
                 zona: env.zona || "",
                 codigo: f.codigo || "",
                 dni: f.dni || "",
@@ -4146,6 +4522,30 @@
               });
             });
           });
+        return rows;
+      };
+
+      const construirFilasAsis = raw => {
+        const rows = [];
+        (raw || [])
+          .filter(item => recordBelongsToScope({ fundo: item.fundo, zona: item.zona, pin: item.pin }))
+          .forEach(env => {
+            const fundoEnv = env.fundo || obtenerFundoUsuario(env.pin) || "";
+            (env.filas || []).forEach(f => {
+              const fnd = f.fundo || fundoEnv;
+              if (!recordBelongsToScope({ fundo: fnd, zona: env.zona, pin: env.pin })) return;
+              rows.push({ fecha: env.fecha, ...f, fundo: fnd });
+            });
+          });
+        return rows;
+      };
+
+      const pintarTabla = () => {
+        const body = $("res-body");
+        if (!body) return;
+
+        if (rs.tipo === "tareos") {
+          const rows = construirFilasTareos(rs.data);
           const totHrs = rows.reduce((s, x) => s + x.horas, 0);
           body.innerHTML = `
             <div class="kpis">
@@ -4155,9 +4555,9 @@
             <div class="card">
               <div class="table-wrap">
                 <table class="res-tbl">
-                  <thead><tr><th>Fecha</th><th>C.LABOR</th><th>DNI</th><th>NOMBRES</th><th>LABOR</th><th>HORAS</th><th>Responsable</th></tr></thead>
+                  <thead><tr><th>Fecha</th><th>C.LABOR</th><th>DNI</th><th>NOMBRES</th><th>LABOR</th><th>HORAS</th><th>FUNDO</th></tr></thead>
                   <tbody>
-                    ${rows.length ? rows.map(r => `<tr><td>${fmtDMY(r.fecha)}</td><td><b>${esc(r.codigo)}</b></td><td>${esc(r.dni)}</td><td>${esc(r.nombre)}</td><td>${esc(r.labor)}</td><td>${r.horas}</td><td>${esc(r.usuario)}</td></tr>`).join("") : `<tr><td colspan="7" class="m">Sin tareos en este rango.</td></tr>`}
+                    ${rows.length ? rows.map(r => `<tr><td>${fmtDMY(r.fecha)}</td><td><b>${esc(r.codigo)}</b></td><td>${esc(r.dni)}</td><td>${esc(r.nombre)}</td><td>${esc(r.labor)}</td><td>${r.horas}</td><td><b>${esc(r.fundo)}</b></td></tr>`).join("") : `<tr><td colspan="7" class="m">Sin tareos en este rango.</td></tr>`}
                   </tbody>
                 </table>
               </div>
@@ -4165,21 +4565,15 @@
           `;
           $("res-xls").onclick = () => {
             if (typeof XLSX === "undefined" || !rows.length) return toast("Sin datos para exportar");
-            const aoa = [["FECHA", "C.LABOR", "DNI", "NOMBRES", "LABOR", "HORAS", "RESPONSABLE"]];
-            rows.forEach(r => aoa.push([fmtDMY(r.fecha), r.codigo, r.dni, r.nombre, r.labor, r.horas, r.usuario]));
+            const aoa = [["FECHA", "C.LABOR", "DNI", "NOMBRES", "LABOR", "HORAS", "FUNDO"]];
+            rows.forEach(r => aoa.push([fmtDMY(r.fecha), r.codigo, r.dni, r.nombre, r.labor, r.horas, r.fundo]));
             const ws = XLSX.utils.aoa_to_sheet(aoa);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Consolidado_Tareos");
             XLSX.writeFile(wb, `Consolidado_Tareos_${rs.desde}_a_${rs.hasta}.xlsx`);
           };
-        } else {
-          const rows = [];
-          filtrados.forEach(env => {
-            (env.filas || []).forEach(f => {
-              if (!recordBelongsToScope({ fundo: f.fundo || env.fundo, zona: env.zona, pin: env.pin })) return;
-              rows.push({ fecha: env.fecha, ...f });
-            });
-          });
+        } else if (rs.tipo === "asistencia") {
+          const rows = construirFilasAsis(rs.data);
           const totPers = rows.reduce((s, r) => s + totalFilaAsis(r), 0);
           body.innerHTML = `
             <div class="kpis">
@@ -4206,11 +4600,42 @@
             XLSX.utils.book_append_sheet(wb, ws, "Consolidado_Asistencia");
             XLSX.writeFile(wb, `Consolidado_Asistencia_${rs.desde}_a_${rs.hasta}.xlsx`);
           };
+        } else {
+          const repTipo = rs.tipo;
+          const filas = repAplanar(rs.data);
+          const cols = REP_COLS[repTipo];
+          const ha = filas.reduce((s, r) => s + toNum(r.ha), 0);
+          const kilos = filas.reduce((s, r) => s + calcKilos(r), 0);
+          const jor = filas.reduce((s, r) => s + toNum(r.jornales), 0);
+
+          body.innerHTML = `
+            <div class="kpis">
+              <div class="kpi"><span class="m">Ha (${REP_CFG[repTipo].titulo})</span><b>${ha.toFixed(2)}</b></div>
+              <div class="kpi"><span class="m">Kilos</span><b>${fmtKilos(kilos)}</b></div>
+              <div class="kpi"><span class="m">Jornales</span><b>${jor.toLocaleString("en-US")}</b></div>
+              <div class="kpi"><span class="m">Kg/Jornal</span><b>${jor > 0 ? fmtKgJor(kilos / jor) : "0.0"}</b></div>
+            </div>
+            <div class="card">
+              <div class="table-wrap">
+                <table class="res-tbl" style="min-width:${cols.length * 70}px">
+                  <thead><tr>${cols.map(k => `<th>${REP_LABEL[k]}</th>`).join("")}</tr></thead>
+                  <tbody>
+                    ${filas.length ? filas.map(r => `<tr>${cols.map(k => `<td>${repCeldaTxt(repTipo, k, r)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${cols.length}" class="m">Sin registros de ${REP_CFG[repTipo].titulo} en este rango.</td></tr>`}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+          $("res-xls").onclick = () => {
+            if (!filas.length) return toast("Sin datos para exportar");
+            repDescargar(repTipo, filas, `Consolidado_${REP_CFG[repTipo].titulo}_${rs.desde}_a_${rs.hasta}.xlsx`, false);
+          };
         }
       };
 
       const consultar = async (force = false) => {
-        const ck = `${CACHE.RESUMEN_PREFIX}${S.demo ? "demo" : "live"}_${rs.tipo}_${rs.desde}_${rs.hasta}_${activePin}`;
+        const tipoActual = rs.tipo;
+        const ck = `${CACHE.RESUMEN_PREFIX}${S.demo ? "demo" : "live"}_${tipoActual}_${rs.desde}_${rs.hasta}_${activePin}`;
         const cached = store.get(ck, null);
         if (cached && Array.isArray(cached.data) && !force) {
           rs.data = cached.data;
@@ -4218,8 +4643,12 @@
           if (cached.ts && (Date.now() - cached.ts) < MAESTRO_TTL_MS) return;
         }
         if ($("res-st")) $("res-st").textContent = "Consultando Drive...";
-        const r = await api({ accion: "listarConsolidado", pin: activePin, tipo: rs.tipo, desde: rs.desde, hasta: rs.hasta });
-        if (S.renderToken !== token || S.activeTab !== "resumen" || S.pin !== activePin) return;
+
+        const r = (tipoActual === "tareos" || tipoActual === "asistencia")
+          ? await api({ accion: "listarConsolidado", pin: activePin, tipo: tipoActual, desde: rs.desde, hasta: rs.hasta })
+          : await repApi({ accion: "listarReportes", tipo: tipoActual, desde: rs.desde, hasta: rs.hasta });
+
+        if (S.renderToken !== token || S.activeTab !== "resumen" || S.pin !== activePin || rs.tipo !== tipoActual) return;
         if (r && r.ok) {
           rs.data = r.data || [];
           store.set(ck, { data: rs.data, ts: Date.now() });
@@ -4230,10 +4659,118 @@
         }
       };
 
-      $("res-tipo").onchange = e => { rs.tipo = e.target.value; consultar(false); };
+      $("res-xls-all").onclick = async () => {
+        if (typeof XLSX === "undefined") return toast("Cargando librería Excel...");
+        const btnAll = $("res-xls-all");
+        btnAll.disabled = true;
+        btnAll.textContent = "Exportando...";
+        toast("Recopilando Tareos, Asistencia, Ajuste y Proyección...");
+
+        const [rTar, rAsis, rAj, rProy] = await Promise.all([
+          api({ accion: "listarConsolidado", pin: activePin, tipo: "tareos", desde: rs.desde, hasta: rs.hasta }),
+          api({ accion: "listarConsolidado", pin: activePin, tipo: "asistencia", desde: rs.desde, hasta: rs.hasta }),
+          repApi({ accion: "listarReportes", tipo: "ajuste", desde: rs.desde, hasta: rs.hasta }),
+          repApi({ accion: "listarReportes", tipo: "proyeccion", desde: rs.desde, hasta: rs.hasta })
+        ]);
+
+        btnAll.disabled = false;
+        btnAll.textContent = "⬇ Todo Excel";
+
+        const rowsTar = construirFilasTareos((rTar && rTar.data) || []);
+        const rowsAsis = construirFilasAsis((rAsis && rAsis.data) || []);
+        const rowsAj = repAplanar((rAj && rAj.data) || []);
+        const rowsProy = repAplanar((rProy && rProy.data) || []);
+
+        const wb = XLSX.utils.book_new();
+
+        const aoaTar = [["FECHA", "C.LABOR", "DNI", "NOMBRES", "LABOR", "HORAS", "FUNDO"]];
+        rowsTar.forEach(r => aoaTar.push([fmtDMY(r.fecha), r.codigo, r.dni, r.nombre, r.labor, r.horas, r.fundo]));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoaTar), "Tareos");
+
+        const aoaAsis = [["Fecha", "Fundo", "N° Grupo", "Supervisor", "Cosecha", "Sup.Ciclo", "Sup.Cuadrilla", "Jabero", "Limpieza", "Riego", "Otros", "total"]];
+        rowsAsis.forEach(r => aoaAsis.push([fmtDMY(r.fecha), r.fundo, r.grupo, r.supervisor, toNum(r.cosecha), toNum(r.supCiclo), toNum(r.supCuadrilla), toNum(r.jabero), toNum(r.limpieza), toNum(r.riego), toNum(r.otros), totalFilaAsis(r)]));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoaAsis), "Asistencia");
+
+        const aoaAj = [REP_COLS.ajuste.map(c => REP_LABEL[c])];
+        rowsAj.forEach(r => aoaAj.push(REP_COLS.ajuste.map(c => repValorCol("ajuste", c, r))));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoaAj), "Ajuste");
+
+        const aoaProy = [REP_COLS.proyeccion.map(c => REP_LABEL[c])];
+        rowsProy.forEach(r => aoaProy.push(REP_COLS.proyeccion.map(c => repValorCol("proyeccion", c, r))));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoaProy), "Proyeccion");
+
+        XLSX.writeFile(wb, `Consolidado_Completo_${rs.desde}_a_${rs.hasta}.xlsx`);
+        toast("✓ Libro Excel completo descargado (4 hojas)");
+      };
+
+      $("res-tipo-btns").onclick = e => {
+        const btn = e.target.closest("[data-rtipo]");
+        if (!btn) return;
+        const nuevoTipo = btn.dataset.rtipo;
+        if (rs.tipo === nuevoTipo) return;
+        rs.tipo = nuevoTipo;
+        rs.data = [];
+        $("res-tipo-btns").querySelectorAll("[data-rtipo]").forEach(b => {
+          b.classList.toggle("active", b.dataset.rtipo === nuevoTipo);
+        });
+        consultar(false);
+      };
       $("res-desde").onchange = e => { rs.desde = e.target.value || rs.desde; if (rs.desde > rs.hasta) rs.hasta = rs.desde; };
       $("res-hasta").onchange = e => { rs.hasta = e.target.value || rs.hasta; if (rs.hasta < rs.desde) rs.desde = rs.hasta; };
       $("res-go").onclick = () => consultar(true);
+
+      $("res-refresh-all").onclick = async () => {
+        const btnAll = $("res-refresh-all");
+        if (btnAll) { btnAll.disabled = true; btnAll.innerHTML = `<span class="spinning">↻</span> Actualizando...`; }
+        if ($("res-st")) $("res-st").textContent = "Descargando Tareos, Asistencia, Ajuste y Proyección desde Drive...";
+
+        const modeTag = S.demo ? "demo" : "live";
+        ["tareos", "asistencia", "ajuste", "proyeccion"].forEach(tp => {
+          store.remove(`${CACHE.RESUMEN_PREFIX}${modeTag}_${tp}_${rs.desde}_${rs.hasta}_${activePin}`);
+          store.remove(`${CACHE_REP.REPCONS_PREFIX}${modeTag}_${tp}_${rs.desde}_${rs.hasta}_${activePin}`);
+        });
+
+        const [rTar, rAsis, rAj, rProy] = await Promise.all([
+          api({ accion: "listarConsolidado", pin: activePin, tipo: "tareos", desde: rs.desde, hasta: rs.hasta }),
+          api({ accion: "listarConsolidado", pin: activePin, tipo: "asistencia", desde: rs.desde, hasta: rs.hasta }),
+          repApi({ accion: "listarReportes", tipo: "ajuste", desde: rs.desde, hasta: rs.hasta }),
+          repApi({ accion: "listarReportes", tipo: "proyeccion", desde: rs.desde, hasta: rs.hasta })
+        ]);
+
+        if (S.renderToken !== token || S.activeTab !== "resumen" || S.pin !== activePin) return;
+
+        const now = Date.now();
+        const mapResp = {
+          tareos: (rTar && rTar.ok) ? (rTar.data || []) : null,
+          asistencia: (rAsis && rAsis.ok) ? (rAsis.data || []) : null,
+          ajuste: (rAj && rAj.ok) ? (rAj.data || []) : null,
+          proyeccion: (rProy && rProy.ok) ? (rProy.data || []) : null
+        };
+
+        Object.entries(mapResp).forEach(([tp, arr]) => {
+          if (arr !== null) {
+            store.set(`${CACHE.RESUMEN_PREFIX}${modeTag}_${tp}_${rs.desde}_${rs.hasta}_${activePin}`, { data: arr, ts: now });
+          }
+        });
+
+        if (mapResp.ajuste !== null && S.rep.ajuste) {
+          S.rep.ajuste.cons = { desde: rs.desde, hasta: rs.hasta, data: mapResp.ajuste, cargado: true, local: false };
+        }
+        if (mapResp.proyeccion !== null && S.rep.proyeccion) {
+          S.rep.proyeccion.cons = { desde: rs.desde, hasta: rs.hasta, data: mapResp.proyeccion, cargado: true, local: false };
+        }
+
+        if (mapResp[rs.tipo] !== null) {
+          rs.data = mapResp[rs.tipo];
+        }
+
+        if (btnAll) { btnAll.disabled = false; btnAll.textContent = "↻ Actualizar todo"; }
+        if ($("res-st")) {
+          $("res-st").textContent = `✓ 4 reportes actualizados · Tareos: ${(mapResp.tareos || []).length} | Asis: ${(mapResp.asistencia || []).length} | Ajuste: ${(mapResp.ajuste || []).length} | Proy: ${(mapResp.proyeccion || []).length}`;
+        }
+        pintarTabla();
+        toast("✓ Todos los reportes actualizados en tiempo real");
+      };
 
       pintarTabla();
       consultar(false);
