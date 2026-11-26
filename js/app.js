@@ -1,0 +1,2218 @@
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwf8wvTgrRF4gjIud5VPOZCpePM2r5dbvMRgaiey-DEd6huXGTpRgjKoj_15L7Crc1a/exec";
+    const APP_NAME = "Sistema de Tareos · AgroBerries";
+    const ADMIN_PIN = "0104";
+    const TTL_MS = 12 * 3600 * 1000;
+    const TXT_NO_CONTRACT = "NO TIENE CONTRATO";
+
+    const BD_FILES = {
+      personal: "BD_PERSONAL_ULTIMA.json",
+      labores: "BD_LABORES_ULTIMA.json",
+      ciclos: "BD_MAESTRO_CICLOS_ULTIMA.json",
+      zonas_fundos: "BD_MAESTRO_ZONAS_FUNDOS_ULTIMA.json",
+      usuarios_acl: "BD_MAESTRO_USUARIOS_ACL_ULTIMA.json",
+      formatos: "BD_MAESTRO_FORMATOS_ULTIMA.json",
+      destinos: "BD_MAESTRO_DESTINOS_ULTIMA.json"
+    };
+
+    const CK = {
+      PERS: "tareos_v16_personal",
+      LAB: "tareos_v16_labores",
+      USR: "tareos_v16_users",
+      ZF: "tareos_v16_zonas_fundos",
+      META: "tareos_v16_meta_maestros",
+      BG: "tareos_v16_bg",
+      TH: "tareos_v16_theme",
+      TAR: "tareos_v16_tareo_",
+      ASI: "tareos_v16_asis_",
+      RES: "tareos_v16_resumen_",
+      REP: "tareos_v16_rep_",
+      REPD: "tareos_v16_repd_",
+      REPC: "tareos_v16_repcons_",
+      MAE: "tareos_v16_maestro_"
+    };
+
+    // Almacenamiento híbrido: localStorage + IndexedDB para padrones grandes (+12,000 trabajadores)
+    window.__MEM = window.__MEM || {};
+    const idbStore = {
+      _db: null,
+      open() {
+        if (this._db) return Promise.resolve(this._db);
+        return new Promise(res => {
+          try {
+            if (!window.indexedDB) return res(null);
+            const req = indexedDB.open("AgroBerriesFastDB", 1);
+            req.onupgradeneeded = e => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains("kv")) db.createObjectStore("kv");
+            };
+            req.onsuccess = e => { this._db = e.target.result; res(this._db); };
+            req.onerror = () => res(null);
+          } catch (_) { res(null); }
+        });
+      },
+      async get(k) {
+        const db = await this.open();
+        if (!db) return null;
+        return new Promise(res => {
+          try {
+            const tx = db.transaction("kv", "readonly");
+            const r = tx.objectStore("kv").get(k);
+            r.onsuccess = () => res(r.result ?? null);
+            r.onerror = () => res(null);
+          } catch (_) { res(null); }
+        });
+      },
+      async set(k, val) {
+        const db = await this.open();
+        if (!db) return;
+        try {
+          const tx = db.transaction("kv", "readwrite");
+          tx.objectStore("kv").put(val, k);
+        } catch (_) {}
+      }
+    };
+
+    const store = {
+      getRaw(k, fb = "") {
+        try { const v = localStorage.getItem(k); if (v !== null) return v; } catch (_) {}
+        return Object.prototype.hasOwnProperty.call(window.__MEM, k) ? window.__MEM[k] : fb;
+      },
+      setRaw(k, v) {
+        const s = String(v);
+        window.__MEM[k] = s;
+        try { localStorage.setItem(k, s); } catch (_) {}
+      },
+      get(k, fb) {
+        try { const r = store.getRaw(k, ""); return r ? JSON.parse(r) : fb; } catch (_) { return fb; }
+      },
+      set(k, v) {
+        window.__MEM[k] = JSON.stringify(v);
+        if (k === CK.PERS || k === CK.MAE + "ciclos") {
+          idbStore.set(k, v);
+        }
+        try { localStorage.setItem(k, window.__MEM[k]); } catch (_) {}
+      },
+      del(k) { delete window.__MEM[k]; try { localStorage.removeItem(k); } catch (_) {} },
+      keys() {
+        const s = new Set(Object.keys(window.__MEM));
+        try { for (let i = 0; i < localStorage.length; i++) s.add(localStorage.key(i)); } catch (_) {}
+        return [...s].filter(Boolean);
+      }
+    };
+
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const localISO = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const hoyISO = () => localISO();
+    const isoManana = () => { const d = new Date(); d.setDate(d.getDate() + 1); return localISO(d); };
+    const isoHaceDias = n => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
+    const fmtDMY = iso => { const p = String(iso || "").split("-"); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : ""; };
+    const normH = h => String(h ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9 /]/g, "").trim();
+    const normK = s => normH(s).replace(/\s+/g, " ");
+    const fundoKey = f => normK(f).replace(/^(LA|EL|LOS|LAS) /, "");
+    const modKey = v => { const t = String(v ?? "").trim(); if (!t) return ""; const n = Number(t); return Number.isFinite(n) ? String(n) : normK(t); };
+    const normDni = v => String(v ?? "").replace(/\D/g, "");
+    const uniq = arr => [...new Set(arr)];
+    const toNum = v => { if (typeof v === "number") return Number.isFinite(v) ? v : 0; const n = Number(String(v ?? "").replace(/,/g, "").trim()); return Number.isFinite(n) ? n : 0; };
+    const parseList = v => Array.isArray(v) ? v.map(x => String(x || "").trim()).filter(Boolean) : String(v || "").split(/[,;|]+/).map(x => x.trim()).filter(Boolean);
+
+    function isoWeek(iso) {
+      const p = String(iso || "").split("-").map(Number);
+      if (p.length < 3 || p.some(isNaN)) return "";
+      const dt = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+      dt.setUTCDate(dt.getUTCDate() + 4 - (dt.getUTCDay() || 7));
+      const y0 = Date.UTC(dt.getUTCFullYear(), 0, 1);
+      return Math.ceil(((dt - y0) / 86400000 + 1) / 7);
+    }
+
+    function toast(msg, ms = 2500) {
+      const t = $("toast");
+      if (!t) return;
+      t.textContent = msg;
+      t.style.display = "block";
+      clearTimeout(t._tm);
+      t._tm = setTimeout(() => { t.style.display = "none"; }, ms);
+    }
+
+    function confirmar(titulo, cuerpo) {
+      return new Promise(res => {
+        $("c-title").textContent = titulo;
+        $("c-body").textContent = cuerpo;
+        $("confirm-modal").style.display = "flex";
+        const done = v => { $("confirm-modal").style.display = "none"; $("c-yes").onclick = null; $("c-no").onclick = null; res(v); };
+        $("c-yes").onclick = () => done(true);
+        $("c-no").onclick = () => done(false);
+      });
+    }
+
+    function abrirModalImagen(titulo, sub, dataUrl, filename) {
+      $("im-title").textContent = titulo;
+      $("im-sub").textContent = sub;
+      $("im-prev").src = dataUrl;
+      $("img-modal").style.display = "flex";
+      const cerrar = () => { $("img-modal").style.display = "none"; $("im-dl").onclick = null; $("im-close").onclick = null; $("im-x").onclick = null; };
+      $("im-close").onclick = cerrar;
+      $("im-x").onclick = cerrar;
+      $("im-dl").onclick = () => { const a = document.createElement("a"); a.download = filename; a.href = dataUrl; a.click(); toast("Imagen PNG descargada"); };
+    }
+
+    function applyTheme(t) {
+      const isLight = t === "light";
+      document.body.classList.toggle("light", isLight);
+      const b = $("btn-theme");
+      if (b) b.textContent = isLight ? "🌙 Oscuro" : "☀️ Claro";
+    }
+
+    function applyBg(url) {
+      const u = String(url || "").trim();
+      const l = $("bg-layer");
+      if (!l) return;
+      if (u) { l.style.backgroundImage = `url("${u.replace(/"/g, '\\"')}")`; document.body.classList.add("has-bg"); }
+      else { l.style.backgroundImage = ""; document.body.classList.remove("has-bg"); }
+    }
+
+    function normRole(rol, pin) {
+      if (String(pin || "").trim() === ADMIN_PIN) return "admin";
+      const r = normK(rol);
+      if (r.includes("ADMIN") || r === "ADMI") return "admin";
+      if (r.includes("AUX")) return "auxiliar";
+      return "supervisor";
+    }
+
+    const DEFAULT_ZF = [
+      { zona: "Trujillo", fundos: ["Linderos 1", "Linderos 2", "Lomas", "La Quebrada", "La Duna", "Pampa Alta", "Escalante 1", "Escalante 2", "San Carlos", "Angostura"] },
+      { zona: "Santa", fundos: ["Santa Rosa", "Santa María"] },
+      { zona: "Olmos", fundos: ["El Retiro"] }
+    ];
+
+    const DEFAULT_LAB = [
+      { nombre: "COSECHA ARANDANO", codigo: "101" },
+      { nombre: "PODA", codigo: "102" },
+      { nombre: "DESHIERBO", codigo: "103" },
+      { nombre: "RIEGO", codigo: "104" },
+      { nombre: "LIMPIEZA DE CAMPO", codigo: "105" },
+      { nombre: "JABERO / ACOPIO", codigo: "106" },
+      { nombre: "SUPERVISION", codigo: "107" }
+    ];
+
+
+    /* DEMO DATA */
+    const DEMO_CICLOS = [
+      ["Trujillo","Linderos 1","EB 9-2",1,28.93,1.1],["Trujillo","Linderos 2","Ventura",4,29.3617,1.1],
+      ["Trujillo","Pampa Alta","EB 9-2",1,11.368,5.1],["Trujillo","Pampa Alta","Ventura",2,23.373,5.1],
+      ["Trujillo","Angostura","EB 9-2",1,22.77,8.1],["Santa","Santa Rosa","Sekoya Pop",1,23.63,9.1],
+      ["Olmos","El Retiro","Sekoya Pop",1,26.5597,10.1]
+    ].map(a => ({ zona: a[0], fundo: a[1], variedad: a[2], modulo: a[3], area: a[4], ciclo: a[5] }));
+
+    const DEMO = {
+      users: [
+        { pin: ADMIN_PIN, nombre: "Administrador Maestro", rol: "admin", zona: "TODAS", zonas: ["TODAS"], fundo: "TODOS", fundos: ["TODOS"] },
+        { pin: "0101", nombre: "Nayely Calderon", rol: "supervisor", zona: "Trujillo", zonas: ["Trujillo"], fundo: "Pampa Alta", fundos: ["Pampa Alta"] },
+        { pin: "0505", nombre: "Auxiliar Norte", rol: "auxiliar", zona: "Trujillo, Santa", zonas: ["Trujillo", "Santa"], fundo: "", fundos: [] }
+      ],
+      personal: [
+        { dni: "72345678", nombre: "PEREZ GOMEZ JUAN CARLOS", estado: "ACTIVO" },
+        { dni: "45678912", nombre: "QUISPE MAMANI MARIA ELENA", estado: "ACTIVO" },
+        { dni: "70981234", nombre: "RODRIGUEZ SILVA LUIS MIGUEL", estado: "ACTIVO" }
+      ],
+      labores: DEFAULT_LAB.map(x => ({ ...x })),
+      zf: DEFAULT_ZF.map(z => ({ zona: z.zona, fundos: [...z.fundos] })),
+      tareos: {},
+      asistencia: {},
+      rep: {},
+      maestros: { ciclos: DEMO_CICLOS.slice(), formatos: ["Granel", "Bulk", "Hand Packed", "Bulk/Granel"], destinos: ["USA", "EU", "EU/USA"] }
+    };
+    /* DEMO DATA */
+
+
+    const S = {
+      demo: false, pin: "", nombre: "", rol: "supervisor", zona: "", zonas: [], fundo: "", fundos: [],
+      personal: [], personalMap: new Map(), labores: [], laboresMap: new Map(), users: [], zonasFundos: [],
+      activeTab: "tareo", menuSec: "usuarios", token: 0,
+      tareo: { fecha: hoyISO(), filas: [], estado: "NUEVO", dirty: false, hist: [], histOk: false , soloLectura: false},
+      asis: { fecha: hoyISO(), filas: [], estado: "NUEVO", dirty: false, hist: [], histOk: false },
+      res: { desde: hoyISO(), hasta: hoyISO(), tipo: "tareos", data: [], counts: { tareos: 0, asistencia: 0, ajuste: 0, proyeccion: 0 } },
+      M: { ciclos: [], formatos: [], destinos: [] },
+      rep: {}
+    };
+
+    const isAdmin = () => S.rol === "admin" || S.pin === ADMIN_PIN;
+    const isAux = () => S.rol === "auxiliar";
+    const canCons = () => isAdmin() || isAux();
+
+    function resetUserWorkspaceState() {
+      S.token++;
+      S.tareo = { fecha: hoyISO(), filas: [], estado: "NUEVO", dirty: false, hist: [], histOk: false, soloLectura: false };
+      S.asis = { fecha: hoyISO(), filas: [], estado: "NUEVO", dirty: false, hist: [], histOk: false };
+      S.res = { desde: hoyISO(), hasta: hoyISO(), tipo: "tareos", data: [], counts: { tareos: 0, asistencia: 0, ajuste: 0, proyeccion: 0 } };
+      S.rep = {
+        ajuste: { fecha: hoyISO(), filas: [], estado: "NUEVO", dirty: false, vista: "mio", vistaInit: false, cons: null, hist: [], histOk: false },
+        proyeccion: { fecha: isoManana(), filas: [], estado: "NUEVO", dirty: false, vista: "mio", vistaInit: false, cons: null, hist: [], histOk: false }
+      };
+    }
+
+    function rebuildIndexes() {
+      S.personalMap = new Map();
+      (S.personal || []).forEach(p => {
+        const d = normDni(p.dni);
+        if (!d) return;
+        S.personalMap.set(d, p);
+        if (d.length === 8 && d.startsWith("0")) S.personalMap.set(d.slice(1), p);
+        if (d.length === 7) S.personalMap.set("0" + d, p);
+      });
+      S.laboresMap = new Map();
+      (S.labores || []).forEach(l => {
+        const n = normK(l.nombre);
+        if (n) S.laboresMap.set(n, String(l.codigo || "").trim());
+      });
+    }
+
+    function mergeUsers(list) {
+      const m = new Map();
+      (S.users || []).forEach(u => { if (u && u.pin) m.set(String(u.pin).trim(), u); });
+      (list || []).forEach(u => {
+        if (!u || !u.pin) return;
+        const pin = String(u.pin).trim();
+        const prev = m.get(pin) || {};
+        const zonas = parseList(u.zonas?.length ? u.zonas : (u.zona || prev.zona));
+        const fundos = parseList(u.fundos?.length ? u.fundos : (u.fundo || prev.fundo));
+        const rol = normRole(u.rol || u.perfil || prev.rol, pin);
+        m.set(pin, {
+          pin, nombre: u.nombre || prev.nombre || `Usuario ${pin}`, rol, perfil: rol,
+          zona: rol === "admin" ? "TODAS" : zonas.join(", "), zonas: rol === "admin" ? ["TODAS"] : zonas,
+          fundo: rol === "admin" ? "TODOS" : fundos.join(", "), fundos: rol === "admin" ? ["TODOS"] : fundos
+        });
+      });
+      if (!m.has(ADMIN_PIN)) {
+        m.set(ADMIN_PIN, { pin: ADMIN_PIN, nombre: "Administrador Maestro", rol: "admin", perfil: "admin", zona: "TODAS", zonas: ["TODAS"], fundo: "TODOS", fundos: ["TODOS"] });
+      }
+      S.users = [...m.values()];
+      store.set(CK.USR, S.users);
+    }
+
+    function hydrateCache() {
+      const p = store.get(CK.PERS, null);
+      S.personal = Array.isArray(p) && p.length ? p : [];
+      const l = store.get(CK.LAB, null);
+      S.labores = Array.isArray(l) && l.length ? l : DEFAULT_LAB.map(x => ({ ...x }));
+      const z = store.get(CK.ZF, null);
+      S.zonasFundos = Array.isArray(z) && z.length ? z : DEFAULT_ZF.map(x => ({ zona: x.zona, fundos: [...x.fundos] }));
+      const u = store.get(CK.USR, null);
+      S.users = Array.isArray(u) && u.length ? u : [{ pin: ADMIN_PIN, nombre: "Administrador Maestro", rol: "admin", zona: "TODAS", zonas: ["TODAS"], fundo: "TODOS", fundos: ["TODOS"] }];
+      S.M.ciclos = store.get(CK.MAE + "ciclos", null) || DEMO_CICLOS.slice();
+      S.M.formatos = store.get(CK.MAE + "formatos", null) || ["Granel", "Bulk", "Hand Packed", "Bulk/Granel"];
+      S.M.destinos = store.get(CK.MAE + "destinos", null) || ["USA", "EU", "EU/USA"];
+      rebuildIndexes();
+      // Hidratar en 3er plano desde IndexedDB si el padrón es grande
+      idbStore.get(CK.PERS).then(bigP => {
+        if (Array.isArray(bigP) && bigP.length > S.personal.length) {
+          S.personal = bigP;
+          rebuildIndexes();
+        }
+      });
+      idbStore.get(CK.MAE + "ciclos").then(bigC => {
+        if (Array.isArray(bigC) && bigC.length > S.M.ciclos.length) {
+          S.M.ciclos = bigC;
+        }
+      });
+    }
+
+    function getScope() {
+      if (isAdmin()) {
+        const allF = uniq([...(S.zonasFundos || []).flatMap(z => z.fundos || []), ...(S.M.ciclos || []).map(c => c.fundo)].filter(Boolean));
+        return { zonas: ["TODAS"], fundos: allF };
+      }
+      const zonas = S.zonas?.length ? S.zonas : parseList(S.zona);
+      let fundos = S.fundos?.length ? S.fundos : parseList(S.fundo);
+      if (!fundos.length && zonas.length) fundos = getFundosByZonas(zonas);
+      return { zonas, fundos };
+    }
+
+    function getFundosByZonas(zonas) {
+      const zk = new Set((zonas || []).map(normK));
+      const out = [];
+      (S.zonasFundos || []).forEach(z => { if (zk.has(normK(z.zona))) out.push(...(z.fundos || [])); });
+      (S.M.ciclos || []).forEach(c => { if (zk.has(normK(c.zona))) out.push(c.fundo); });
+      return uniq(out.filter(Boolean));
+    }
+
+    function inScope(rec) {
+      if (isAdmin()) return true;
+      const sc = getScope();
+      const rf = fundoKey(rec.fundo || "");
+      const rz = normK(rec.zona || "");
+      if (sc.fundos.length && rf) return sc.fundos.some(f => fundoKey(f) === rf);
+      if (sc.zonas.length) {
+        if (rz && sc.zonas.some(z => normK(z) === rz)) return true;
+        if (rf) return getFundosByZonas(sc.zonas).some(f => fundoKey(f) === rf);
+      }
+      return true;
+    }
+
+    function isOwnRec(rec) {
+      if (!rec) return false;
+      if (rec.pin && String(rec.pin).trim() !== String(S.pin).trim()) return false;
+      if (!rec.pin && rec.usuario && normK(rec.usuario) !== normK(S.nombre)) return false;
+      return true;
+    }
+
+    function setSync(txt, warn = false) {
+      if ($("sync-ind")) $("sync-ind").textContent = txt;
+      if ($("sync-dot")) $("sync-dot").className = warn ? "dot warn" : "dot";
+    }
+
+    // =========================================================================
+    // MOTOR DE RED CON GOOGLE APPS SCRIPT
+    // =========================================================================
+    function demoApi(p) {
+      const a = p.accion;
+      if (a === "listarUsuarios") return { ok: true, usuarios: DEMO.users, data: DEMO.users };
+      if (a === "login" || a === "validarPin") {
+        const u = DEMO.users.find(x => String(x.pin) === String(p.pin || "").trim());
+        return u ? { ok: true, usuario: { ...u } } : { ok: false, error: "PIN no registrado" };
+      }
+      if (a === "guardarUsuario") {
+        const idx = DEMO.users.findIndex(x => String(x.pin) === String(p.pinActual || p.pin));
+        const obj = { pin: String(p.nuevoPin || p.pin), nombre: p.nombre, rol: normRole(p.rol, p.nuevoPin || p.pin), zona: p.zona, zonas: parseList(p.zonas || p.zona), fundo: p.fundo, fundos: parseList(p.fundos || p.fundo) };
+        if (idx >= 0) DEMO.users[idx] = obj; else DEMO.users.push(obj);
+        return { ok: true, usuarios: DEMO.users };
+      }
+      if (a === "eliminarUsuario") { DEMO.users = DEMO.users.filter(x => String(x.pin) !== String(p.targetPin)); return { ok: true, usuarios: DEMO.users }; }
+      if (a === "getDatosIniciales") return { ok: true, usuarios: DEMO.users, personal: DEMO.personal, labores: DEMO.labores, zonasFundos: DEMO.zf, ciclos: DEMO.maestros.ciclos, formatos: DEMO.maestros.formatos, destinos: DEMO.maestros.destinos };
+      if (a === "getMaestro") {
+        if (p.nombre === "usuarios_acl" || p.nombre === "usuarios") return { ok: true, data: DEMO.users };
+        if (p.nombre === "zonas_fundos") return { ok: true, data: DEMO.zf };
+        if (p.nombre === "personal") return { ok: true, data: DEMO.personal };
+        if (p.nombre === "labores") return { ok: true, data: DEMO.labores };
+        return { ok: true, data: DEMO.maestros[p.nombre] || [] };
+      }
+      if (a === "cargarMaestro") {
+        if (p.nombre === "usuarios_acl" || p.nombre === "usuarios") DEMO.users = p.data || [];
+        else if (p.nombre === "zonas_fundos") DEMO.zf = p.data || [];
+        else if (p.nombre === "personal") DEMO.personal = p.data || [];
+        else if (p.nombre === "labores") DEMO.labores = p.data || [];
+        else DEMO.maestros[p.nombre] = p.data || [];
+        return { ok: true };
+      }
+      if (a === "cargarPersonal") { DEMO.personal = p.data || []; return { ok: true }; }
+      if (a === "cargarLabores") { DEMO.labores = p.data || []; return { ok: true }; }
+      if (a === "getTareo") return { ok: true, data: DEMO.tareos[`${p.fecha}_${p.pin}`] || { filas: [], estado: "NUEVO" } };
+      if (a === "guardarTareo") { DEMO.tareos[`${p.fecha}_${p.pin}`] = { tipo: "tareos", fecha: p.fecha, pin: p.pin, usuario: p.usuario, zona: p.zona, fundo: p.fundo, filas: p.filas || [], estado: "GUARDADO" }; return { ok: true }; }
+      if (a === "borrarTareo") { delete DEMO.tareos[`${p.fecha}_${p.pin}`]; return { ok: true }; }
+      if (a === "getAsistencia") return { ok: true, data: DEMO.asistencia[`${p.fecha}_${p.pin}`] || { filas: [], estado: "NUEVO" } };
+      if (a === "guardarAsistencia") { DEMO.asistencia[`${p.fecha}_${p.pin}`] = { tipo: "asistencia", fecha: p.fecha, pin: p.pin, usuario: p.usuario, zona: p.zona, fundo: p.fundo, filas: p.filas || [], estado: "GUARDADO" }; return { ok: true }; }
+      if (a === "borrarAsistencia") { delete DEMO.asistencia[`${p.fecha}_${p.pin}`]; return { ok: true }; }
+      if (a === "listarConsolidado") {
+        const src = p.tipo === "asistencia" ? Object.values(DEMO.asistencia) : Object.values(DEMO.tareos);
+        return { ok: true, data: src.filter(x => x.fecha >= p.desde && x.fecha <= p.hasta && (!p.soloPin || String(x.pin) === String(p.soloPin))) };
+      }
+      if (a === "getReporte") { const v = DEMO.rep[`${p.tipo}_${p.fecha}_${p.pin}`]; return { ok: true, data: v ? { ...v, estado: "GUARDADO" } : { filas: [], estado: "NUEVO" } }; }
+      if (a === "guardarReporte") { DEMO.rep[`${p.tipo}_${p.fecha}_${p.pin}`] = { tipo: p.tipo, fecha: p.fecha, pin: p.pin, usuario: p.usuario, zona: p.zona, fundo: p.fundo, filas: p.filas || [] }; return { ok: true }; }
+      if (a === "borrarReporte") { delete DEMO.rep[`${p.tipo}_${p.fecha}_${p.pin}`]; return { ok: true }; }
+      if (a === "listarReportes") {
+        return { ok: true, data: Object.values(DEMO.rep).filter(x => x.tipo === p.tipo && x.fecha >= p.desde && x.fecha <= p.hasta && (!p.soloPin || String(x.pin) === String(p.soloPin))) };
+      }
+      return { ok: true };
+    }
+
+    async function api(payload, opts = {}) {
+      if (S.demo) return demoApi(payload);
+      const isWrite = /^(guardar|cargar|eliminar|borrar)/i.test(String(payload.accion || ""));
+      const ms = opts.timeout || (isWrite ? 15000 : 8000);
+      const ctrl = new AbortController();
+      const tm = setTimeout(() => ctrl.abort(), ms);
+      try {
+        let res;
+        if (!isWrite) {
+          res = await fetch(`${SCRIPT_URL}?q=${encodeURIComponent(JSON.stringify(payload))}`, { method: "GET", redirect: "follow", signal: ctrl.signal });
+        } else {
+          res = await fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify(payload), redirect: "follow", signal: ctrl.signal });
+        }
+        clearTimeout(tm);
+        const txt = await res.text();
+        let data;
+        try { data = JSON.parse(txt); } catch (_) { return { ok: false, offline: true, error: "Respuesta no JSON" }; }
+        setSync(S.pin ? `Drive OK · ${S.nombre}` : "Script (Drive)", false);
+        return data;
+      } catch (err) {
+        clearTimeout(tm);
+        if (!isWrite) {
+          try {
+            const c2 = new AbortController();
+            const t2 = setTimeout(() => c2.abort(), 7000);
+            const r2 = await fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify(payload), redirect: "follow", signal: c2.signal });
+            clearTimeout(t2);
+            const j2 = await r2.json();
+            setSync(S.pin ? `Drive OK · ${S.nombre}` : "Script (Drive)", false);
+            return j2;
+          } catch (_) {}
+        }
+        setSync("Modo local (sin red)", true);
+        return { ok: false, offline: true, error: err.name === "AbortError" ? "Tiempo de espera agotado" : "Sin conexión a Drive" };
+      }
+    }
+
+    // =========================================================================
+    // SINCRONIZACIÓN DE USUARIOS (SOLO AL CARGAR PIN) Y RESTO EN 3ER PLANO
+    // =========================================================================
+    async function syncUsersOnly(silencioso = false) {
+      if (S.demo) {
+        mergeUsers(DEMO.users);
+        if (!silencioso) toast(`✓ ${S.users.length} usuarios actualizados`);
+        return S.users;
+      }
+      const [r1, r2, r3] = await Promise.all([
+        api({ accion: "listarUsuarios" }, { timeout: 6500 }),
+        api({ accion: "getMaestro", nombre: "usuarios_acl", archivo: BD_FILES.usuarios_acl }, { timeout: 6500 }),
+        api({ accion: "getMaestro", nombre: "usuarios" }, { timeout: 6500 })
+      ]);
+      let ok = false;
+      [r1, r2, r3].forEach(r => {
+        const arr = Array.isArray(r?.usuarios) ? r.usuarios : (Array.isArray(r?.data) ? r.data : null);
+        if (r?.ok && Array.isArray(arr) && arr.length) { mergeUsers(arr); ok = true; }
+      });
+      if ($("login-sync-txt")) $("login-sync-txt").textContent = ok ? `Drive OK · ${S.users.length} usuarios` : `Caché local · ${S.users.length} usuarios`;
+      if (!silencioso) toast(ok ? `✓ ${S.users.length} usuarios actualizados` : "Sin respuesta de Drive; usando caché");
+      return S.users;
+    }
+
+    // 3er plano: descarga el padrón completo de trabajadores y maestros sin frenar el ingreso
+    async function syncThirdPlaneDatabases() {
+      if (S.demo) {
+        S.personal = DEMO.personal.slice();
+        S.labores = DEMO.labores.slice();
+        S.zonasFundos = DEMO.zf.slice();
+        S.M = { ciclos: DEMO.maestros.ciclos.slice(), formatos: DEMO.maestros.formatos.slice(), destinos: DEMO.maestros.destinos.slice() };
+        rebuildIndexes();
+        return;
+      }
+      setSync("Actualizando BDs en 3er plano...", false);
+      const pinSnap = S.pin;
+      const [rInit, rPers, rLab, rZF, rCic, rFmt, rDst] = await Promise.all([
+        api({ accion: "getDatosIniciales", pin: pinSnap }, { timeout: 22000 }),
+        api({ accion: "getMaestro", nombre: "personal", archivo: BD_FILES.personal, pin: pinSnap }, { timeout: 25000 }),
+        api({ accion: "getMaestro", nombre: "labores", archivo: BD_FILES.labores, pin: pinSnap }, { timeout: 12000 }),
+        api({ accion: "getMaestro", nombre: "zonas_fundos", archivo: BD_FILES.zonas_fundos, pin: pinSnap }, { timeout: 12000 }),
+        api({ accion: "getMaestro", nombre: "ciclos", archivo: BD_FILES.ciclos, pin: pinSnap }, { timeout: 18000 }),
+        api({ accion: "getMaestro", nombre: "formatos", archivo: BD_FILES.formatos, pin: pinSnap }, { timeout: 10000 }),
+        api({ accion: "getMaestro", nombre: "destinos", archivo: BD_FILES.destinos, pin: pinSnap }, { timeout: 10000 })
+      ]);
+
+      const persArr = (rPers?.ok && Array.isArray(rPers.data) && rPers.data.length)
+        ? rPers.data
+        : ((rInit?.ok && Array.isArray(rInit.personal) && rInit.personal.length) ? rInit.personal : null);
+      if (persArr) {
+        S.personal = persArr;
+        store.set(CK.PERS, S.personal);
+      }
+
+      const labArr = (rLab?.ok && Array.isArray(rLab.data) && rLab.data.length)
+        ? rLab.data
+        : ((rInit?.ok && Array.isArray(rInit.labores) && rInit.labores.length) ? rInit.labores : null);
+      if (labArr) {
+        S.labores = labArr;
+        store.set(CK.LAB, S.labores);
+      }
+
+      const zfArr = (rZF?.ok && Array.isArray(rZF.data) && rZF.data.length)
+        ? rZF.data
+        : ((rInit?.ok && Array.isArray(rInit.zonasFundos) && rInit.zonasFundos.length) ? rInit.zonasFundos : null);
+      if (zfArr) {
+        S.zonasFundos = zfArr;
+        store.set(CK.ZF, S.zonasFundos);
+      }
+
+      const cicArr = (rCic?.ok && Array.isArray(rCic.data) && rCic.data.length)
+        ? rCic.data
+        : ((rInit?.ok && Array.isArray(rInit.ciclos) && rInit.ciclos.length) ? rInit.ciclos : null);
+      if (cicArr) {
+        S.M.ciclos = cicArr;
+        store.set(CK.MAE + "ciclos", S.M.ciclos);
+      }
+
+      const fmtArr = (rFmt?.ok && Array.isArray(rFmt.data) && rFmt.data.length)
+        ? rFmt.data
+        : ((rInit?.ok && Array.isArray(rInit.formatos) && rInit.formatos.length) ? rInit.formatos : null);
+      if (fmtArr) {
+        S.M.formatos = fmtArr;
+        store.set(CK.MAE + "formatos", S.M.formatos);
+      }
+
+      const dstArr = (rDst?.ok && Array.isArray(rDst.data) && rDst.data.length)
+        ? rDst.data
+        : ((rInit?.ok && Array.isArray(rInit.destinos) && rInit.destinos.length) ? rInit.destinos : null);
+      if (dstArr) {
+        S.M.destinos = dstArr;
+        store.set(CK.MAE + "destinos", S.M.destinos);
+      }
+
+      rebuildIndexes();
+      if (S.pin) setSync(`Drive OK · ${S.nombre}`, false);
+    }
+
+    // =========================================================================
+    // LOGIN INSTANTÁNEO (0ms)
+    // =========================================================================
+    function applyUser(u) {
+      resetUserWorkspaceState();
+      const pin = String(u.pin || "").trim();
+      S.pin = pin;
+      S.nombre = u.nombre || `Usuario ${pin}`;
+      S.rol = normRole(u.rol || u.perfil, pin);
+      const z = parseList(u.zonas?.length ? u.zonas : u.zona);
+      const f = parseList(u.fundos?.length ? u.fundos : u.fundo);
+      S.zonas = isAdmin() ? ["TODAS"] : z;
+      S.zona = isAdmin() ? "TODAS" : z.join(", ");
+      S.fundos = isAdmin() ? ["TODOS"] : f;
+      S.fundo = isAdmin() ? "TODOS" : f.join(", ");
+      S.activeTab = canCons() ? "resumen" : "tareo";
+    }
+
+    async function doLogin(rawPin) {
+      const pin = String(rawPin || "").trim();
+      if (pin.length < 4) return toast("Ingresa un PIN válido (4 a 8 dígitos)");
+
+      // Si el usuario ya está en memoria/caché o es Admin, ingresa en 0ms
+      let hit = (S.users || []).find(u => String(u.pin).trim() === pin);
+      if (hit) {
+        applyUser(hit);
+        renderShell();
+        setTimeout(() => { if (S.pin === pin) syncThirdPlaneDatabases(); }, 80);
+        return;
+      }
+
+      const btn = $("btn-login");
+      if (btn) { btn.disabled = true; btn.textContent = "..."; }
+      await syncUsersOnly(true);
+      hit = (S.users || []).find(u => String(u.pin).trim() === pin);
+      if (!hit) {
+        const r = await api({ accion: "login", pin }, { timeout: 6000 });
+        if (r?.ok && r.usuario) { mergeUsers([r.usuario]); hit = (S.users || []).find(u => String(u.pin).trim() === pin) || r.usuario; }
+      }
+      if (btn) { btn.disabled = false; btn.textContent = "Entrar"; }
+      if (!hit) return toast("PIN no encontrado. Pulsa '↻ Actualizar usuarios'");
+
+      applyUser(hit);
+      renderShell();
+      setTimeout(() => { if (S.pin === pin) syncThirdPlaneDatabases(); }, 80);
+    }
+
+    function renderLogin() {
+      closeMenu();
+      $("app").innerHTML = `
+        <div class="login-wrap">
+          <div class="card login-card">
+            <div style="font-size:26px;margin-bottom:4px">🫐</div>
+            <div style="font-weight:800;font-size:16px;margin-bottom:2px">${APP_NAME}</div>
+            <div class="m" style="margin-bottom:14px">Ingresa tu PIN de acceso</div>
+            <div class="login-row">
+              <input id="pin-in" type="password" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="off" />
+              <button id="btn-login" type="button" class="btn">Entrar</button>
+
+              <!-- Por comprobar si hace algo el boton-->
+              <!--<button id="btn-ref-u" type="button" class="btn btn-s" title="Actualizar usuarios">↻</button>-->
+
+            </div>
+            <div class="login-sync">
+              <span id="login-sync-txt" class="m" style="font-size:10.5px">Listo · ${S.users.length} usuario(s)</span>
+              <button id="btn-ref-u2" type="button" class="btn btn-inf btn-xs">↻ Actualizar usuarios</button>
+            </div>
+            <div class="keypad" id="pin-pad">
+              ${["1","2","3","4","5","6","7","8","9","⌫","0","OK"].map(k => `<button type="button" data-k="${k}">${k}</button>`).join("")}
+            </div>
+            <div class="m" style="margin-top:11px;font-size:10.5px">Cada usuario opera de forma independiente</div>
+          </div>
+        </div>
+      `;
+      const inp = $("pin-in");
+      $("btn-login").onclick = () => doLogin(inp.value);
+      inp.onkeydown = e => { if (e.key === "Enter") doLogin(inp.value); };
+      const doRef = async () => {
+        //$("btn-ref-u").disabled = true;
+        $("btn-ref-u2").disabled = true;
+        await syncUsersOnly(false);
+        //$("btn-ref-u").disabled = false;
+        $("btn-ref-u2").disabled = false;
+      };
+      //$("btn-ref-u").onclick = doRef;
+      $("btn-ref-u2").onclick = doRef;
+      $("pin-pad").onclick = e => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        const k = b.dataset.k;
+        if (k === "⌫") inp.value = inp.value.slice(0, -1);
+        else if (k === "OK") doLogin(inp.value);
+        else if (inp.value.length < 8) {
+          inp.value += k;
+          if (inp.value.length === 4 && (S.users || []).some(u => String(u.pin) === inp.value)) doLogin(inp.value);
+        }
+      };
+      // Sincroniza SOLO los usuarios en segundo plano al abrir la pantalla de PIN
+      syncUsersOnly(true);
+    }
+
+    // =========================================================================
+    // LECTURA EXCEL Y CARPETA DE 30 DÍAS
+    // =========================================================================
+    function leerExcel(file) {
+      return new Promise((res, rej) => {
+        if (typeof XLSX === "undefined") return rej(new Error("Lector Excel aún cargando, intenta en 2 segundos."));
+        const fr = new FileReader();
+        fr.onload = ev => {
+          try {
+            const wb = XLSX.read(new Uint8Array(ev.target.result), { type: "array", cellDates: false });
+            res(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" }));
+          } catch (err) { rej(new Error("Error leyendo Excel: " + err.message)); }
+        };
+        fr.onerror = () => rej(new Error("No se pudo abrir el archivo"));
+        fr.readAsArrayBuffer(file);
+      });
+    }
+
+    async function fetchUserHistory30d(tipo) {
+      const desde = isoHaceDias(30), hasta = isoManana();
+      const map = new Map();
+      const pfx = tipo === "tareos" ? `${CK.TAR}${S.demo ? "demo" : "live"}_`
+        : tipo === "asistencia" ? `${CK.ASI}${S.demo ? "demo" : "live"}_`
+        : `${CK.REPD}${S.demo ? "demo" : "live"}_${tipo}_`;
+
+      store.keys().forEach(k => {
+        if (!k.startsWith(pfx) || !k.endsWith(`_${S.pin}`)) return;
+        const rest = k.slice(pfx.length, -(`_${S.pin}`.length));
+        const obj = store.get(k, null);
+        if (obj && Array.isArray(obj.filas) && obj.filas.length && rest >= desde) {
+          map.set(rest, { fecha: rest, filas: obj.filas, fundo: S.fundo });
+        }
+      });
+
+      const r = (tipo === "tareos" || tipo === "asistencia")
+        ? await api({ accion: "listarConsolidado", pin: S.pin, soloPin: S.pin, tipo, desde, hasta }, { timeout: 6500 })
+        : await api({ accion: "listarReportes", pin: S.pin, soloPin: S.pin, tipo, desde, hasta }, { timeout: 6500 });
+
+      if (r?.ok && Array.isArray(r.data)) {
+        r.data.forEach(item => {
+          if (item?.fecha && isOwnRec(item) && Array.isArray(item.filas)) map.set(item.fecha, item);
+        });
+      }
+      return [...map.values()].sort((a, b) => b.fecha.localeCompare(a.fecha));
+    }
+
+    async function openTareoFolderModal() {
+      $("folder-modal").style.display = "flex";
+      const listEl = $("folder-list");
+      const paint = items => {
+        if (!items.length) {
+          listEl.innerHTML = `<div class="m" style="padding:14px;text-align:center">No tienes tareos guardados en los últimos 30 días.</div>`;
+          return;
+        }
+        listEl.innerHTML = items.map(it => {
+          const hrs = (it.filas || []).reduce((s, f) => s + toNum(f.horas), 0);
+          const cur = it.fecha === S.tareo.fecha;
+          const soloLectura = it.fecha < hoyISO();
+          return `
+            <div class="folder-item ${cur ? "cur" : ""}">
+              <div style="min-width:0;flex:1">
+                <div style="font-weight:800;font-size:12px">${fmtDMY(it.fecha)} ${cur ? `<span class="badge b-env">ABIERTO</span>` : ""}</div>
+                <div class="m" style="font-size:10.5px">${(it.filas || []).length} trabajador(es) · ${hrs.toFixed(1).replace(/\.0$/, "")} hrs</div>
+              </div>
+              <div class="row">
+                <button type="button" class="btn btn-xs" data-fopen="${it.fecha}">${soloLectura ? "Ver" : "Editar"}</button>
+                ${soloLectura ? "" : `<button type="button" class="btn btn-d btn-xs" data-fdel="${it.fecha}">✕</button>`}
+              </div>
+            </div>
+          `;
+        }).join("");
+
+        listEl.querySelectorAll("[data-fopen]").forEach(b => {
+          b.onclick = () => {
+            const f = b.dataset.fopen;
+            const hit = items.find(x => x.fecha === f);
+            $("folder-modal").style.display = "none";
+            S.activeTab = "tareo";
+            S.tareo.soloLectura = f < hoyISO();
+            S.tareo.fecha = f;
+            S.tareo.filas = hit?.filas ? hit.filas.map(x => ({ ...x })) : [];
+            S.tareo.estado = "GUARDADO";
+            S.tareo.dirty = false;
+            renderShell();
+          };
+        });
+
+        listEl.querySelectorAll("[data-fdel]").forEach(b => {
+          b.onclick = async () => {
+            const f = b.dataset.fdel;
+            if (f < hoyISO()) { toast("No se puede eliminar un tareo de fecha anterior"); return; }
+            if (!(await confirmar("Eliminar tareo", `¿Borrar el tareo del ${fmtDMY(f)}?`))) return;
+            await api({ accion: "borrarTareo", pin: S.pin, fecha: f });
+            store.del(`${CK.TAR}${S.demo ? "demo" : "live"}_${f}_${S.pin}`);
+            S.tareo.hist = S.tareo.hist.filter(x => x.fecha !== f);
+            paint(S.tareo.hist);
+            toast("Tareo eliminado");
+          };
+        });
+      };
+
+      if (S.tareo.histOk) paint(S.tareo.hist);
+      else listEl.innerHTML = `<div class="m" style="padding:14px;text-align:center">Cargando carpeta...</div>`;
+
+      const load = async () => {
+        S.tareo.hist = await fetchUserHistory30d("tareos");
+        S.tareo.histOk = true;
+        paint(S.tareo.hist);
+      };
+      $("folder-ref").onclick = load;
+      $("folder-x").onclick = () => { $("folder-modal").style.display = "none"; };
+      load();
+    }
+
+    // =========================================================================
+    // MENÚ CONFIGURACIÓN Y BASES DE DATOS (CON CARGA DE LISTA DE TRABAJADORES)
+    // =========================================================================
+    function openMenu(sec) {
+      if (sec) S.menuSec = sec;
+      $("menu-bd").style.display = "block";
+      $("menu-dr").style.display = "flex";
+      renderMenu();
+    }
+    function closeMenu() {
+      if ($("menu-bd")) $("menu-bd").style.display = "none";
+      if ($("menu-dr")) $("menu-dr").style.display = "none";
+    }
+    $("menu-bd").onclick = closeMenu;
+
+    function renderMenu() {
+      const dr = $("menu-dr");
+      if (!dr) return;
+      const adm = isAdmin();
+      if (!adm && S.menuSec !== "apariencia") S.menuSec = "apariencia";
+      dr.innerHTML = `
+        <div class="row sp" style="margin-bottom:8px">
+          <div>
+            <div style="font-weight:800;font-size:14px">☰ Configuración</div>
+            <div class="m">${esc(S.nombre)} · <span class="badge b-role">${S.rol.toUpperCase()}</span></div>
+          </div>
+          <button id="m-close" type="button" class="btn btn-s btn-xs">✕</button>
+        </div>
+        ${adm ? `
+          <div class="menu-sec">Usuarios y Territorio</div>
+          <button type="button" class="menu-btn ${S.menuSec === "usuarios" ? "on" : ""}" data-ms="usuarios"><span>Usuarios</span><span>›</span></button>
+          <button type="button" class="menu-btn ${S.menuSec === "zonas" ? "on" : ""}" data-ms="zonas"><span>Zonas y Fundos</span><span>›</span></button>
+          <div class="menu-sec">Bases de Datos en Drive</div>
+          <button type="button" class="menu-btn ${S.menuSec === "personal" ? "on" : ""}" data-ms="personal"><span>Personal (${S.personal.length.toLocaleString("en-US")})</span><span>›</span></button>
+          <button type="button" class="menu-btn ${S.menuSec === "labores" ? "on" : ""}" data-ms="labores"><span>Labores (${S.labores.length})</span><span>›</span></button>
+          <button type="button" class="menu-btn ${S.menuSec === "ciclos" ? "on" : ""}" data-ms="ciclos"><span>Ciclos / Formatos</span><span>›</span></button>
+        ` : ""}
+        <div class="menu-sec">Apariencia y Caché</div>
+        <button type="button" class="menu-btn ${S.menuSec === "apariencia" ? "on" : ""}" data-ms="apariencia"><span>🎨 Tema y Sincronización</span><span>›</span></button>
+        <div id="m-body" style="margin-top:8px"></div>
+      `;
+      $("m-close").onclick = closeMenu;
+      dr.querySelectorAll("[data-ms]").forEach(b => { b.onclick = () => { S.menuSec = b.dataset.ms; renderMenu(); }; });
+      const body = $("m-body");
+      if (S.menuSec === "usuarios") menuUsuarios(body);
+      else if (S.menuSec === "zonas") menuZonas(body);
+      else if (S.menuSec === "personal") menuPersonal(body);
+      else if (S.menuSec === "labores") menuLabores(body);
+      else if (S.menuSec === "ciclos") menuCiclos(body);
+      else menuApariencia(body);
+    }
+
+    function menuUsuarios(b) {
+      const zList = (S.zonasFundos || []).map(z => z.zona);
+      b.innerHTML = `
+        <div class="card">
+          <div style="font-weight:800;margin-bottom:6px">Crear / Editar Usuario</div>
+          <input id="u-nom" placeholder="Nombre completo" style="margin-bottom:6px" />
+          <div class="row" style="margin-bottom:6px">
+            <select id="u-rol" style="flex:1">
+              <option value="supervisor">Cosecha / Supervisor (1 Zona + Fundos)</option>
+              <option value="auxiliar">Auxiliar (1+ Zonas / Consolidados)</option>
+              <option value="admin">ADMI (Todas las zonas y fundos)</option>
+            </select>
+            <input id="u-pin" inputmode="numeric" maxlength="8" placeholder="PIN" style="width:96px" />
+          </div>
+          <div id="u-sc" style="margin-bottom:8px"></div>
+          <button id="u-save" type="button" class="btn" style="width:100%">Guardar Usuario</button>
+        </div>
+        <div class="card">
+          <div class="row sp" style="margin-bottom:6px">
+            <span style="font-weight:800">Usuarios (${S.users.length})</span>
+            <button id="u-ref" type="button" class="btn btn-s btn-xs">↻ Drive</button>
+          </div>
+          <div id="u-list"></div>
+        </div>
+      `;
+      let selZ = zList.length ? [zList[0]] : [], selF = [];
+      const paintSc = () => {
+        const rol = $("u-rol").value, box = $("u-sc");
+        if (rol === "admin") { box.innerHTML = `<div class="m" style="color:var(--pri)">✓ Acceso total a todas las zonas y fundos.</div>`; return; }
+        if (rol === "supervisor") {
+          const za = selZ[0] || zList[0] || "";
+          if (za && !selZ.includes(za)) selZ = [za];
+          const fd = getFundosByZonas([za]);
+          box.innerHTML = `
+            <label class="m">Zona (1):</label>
+            <select id="u-zs" style="margin:3px 0 6px">${zList.map(z => `<option value="${esc(z)}" ${normK(z) === normK(za) ? "selected" : ""}>${esc(z)}</option>`).join("")}</select>
+            <label class="m">Fundos:</label>
+            <div class="chips-box" style="margin-top:3px">${fd.map(f => `<span class="sel-chip ${selF.includes(f) ? "on" : ""}" data-f="${esc(f)}">${esc(f)}</span>`).join("") || `<span class="m">Sin fundos</span>`}</div>
+          `;
+          if ($("u-zs")) $("u-zs").onchange = e => { selZ = [e.target.value]; selF = []; paintSc(); };
+        } else {
+          const fd = getFundosByZonas(selZ);
+          box.innerHTML = `
+            <label class="m">Zonas:</label>
+            <div class="chips-box" style="margin:3px 0 6px">${zList.map(z => `<span class="sel-chip ${selZ.includes(z) ? "on" : ""}" data-z="${esc(z)}">${esc(z)}</span>`).join("")}</div>
+            <label class="m">Fundos (vacío = toda la zona):</label>
+            <div class="chips-box" style="margin-top:3px">${fd.map(f => `<span class="sel-chip ${selF.includes(f) ? "on" : ""}" data-f="${esc(f)}">${esc(f)}</span>`).join("") || `<span class="m">Elige una zona</span>`}</div>
+          `;
+          box.querySelectorAll("[data-z]").forEach(c => { c.onclick = () => { const z = c.dataset.z; selZ = selZ.includes(z) ? selZ.filter(x => x !== z) : [...selZ, z]; const vf = new Set(getFundosByZonas(selZ)); selF = selF.filter(x => vf.has(x)); paintSc(); }; });
+        }
+        box.querySelectorAll("[data-f]").forEach(c => { c.onclick = () => { const f = c.dataset.f; selF = selF.includes(f) ? selF.filter(x => x !== f) : [...selF, f]; paintSc(); }; });
+      };
+      $("u-rol").onchange = () => { if ($("u-rol").value === "supervisor" && selZ.length > 1) selZ = [selZ[0]]; paintSc(); };
+      paintSc();
+
+      const paintList = () => {
+        $("u-list").innerHTML = S.users.map(u => `
+          <div class="t-item">
+            <div class="row sp">
+              <div><b>${esc(u.nombre)}</b> <span class="badge b-role">${esc(u.rol)}</span></div>
+              <span class="badge b-env">PIN: ${esc(u.pin)}</span>
+            </div>
+            <div class="m" style="font-size:10px;margin:3px 0">Zona: <b>${esc(u.zona || "—")}</b> · Fundo: <b>${esc(u.fundo || "Todos")}</b></div>
+            <div class="row" style="justify-content:flex-end">
+              <button type="button" class="btn btn-s btn-xs" data-ue="${esc(u.pin)}">✎ Editar</button>
+              ${String(u.pin) !== ADMIN_PIN ? `<button type="button" class="btn btn-d btn-xs" data-ud="${esc(u.pin)}">✕</button>` : ""}
+            </div>
+          </div>
+        `).join("");
+        $("u-list").querySelectorAll("[data-ue]").forEach(btn => {
+          btn.onclick = () => {
+            const u = S.users.find(x => String(x.pin) === btn.dataset.ue);
+            if (!u) return;
+            $("u-nom").value = u.nombre || "";
+            $("u-pin").value = u.pin || "";
+            $("u-rol").value = normRole(u.rol, u.pin);
+            selZ = parseList(u.zonas?.length ? u.zonas : u.zona).filter(z => normK(z) !== "TODAS");
+            if (!selZ.length && zList.length) selZ = [zList[0]];
+            selF = parseList(u.fundos?.length ? u.fundos : u.fundo).filter(f => normK(f) !== "TODOS");
+            paintSc();
+          };
+        });
+        $("u-list").querySelectorAll("[data-ud]").forEach(btn => {
+          btn.onclick = async () => {
+            const tp = btn.dataset.ud;
+            if (!(await confirmar("Eliminar usuario", `¿Eliminar el acceso con PIN ${tp}?`))) return;
+            S.users = S.users.filter(x => String(x.pin) !== tp);
+            store.set(CK.USR, S.users);
+            paintList();
+            await Promise.all([
+              api({ accion: "eliminarUsuario", pin: S.pin, targetPin: tp }),
+              api({ accion: "cargarMaestro", pin: S.pin, nombre: "usuarios_acl", archivo: BD_FILES.usuarios_acl, reemplazar: true, data: S.users })
+            ]);
+            toast("Usuario eliminado");
+          };
+        });
+      };
+      paintList();
+
+      $("u-ref").onclick = async () => { await syncUsersOnly(false); paintList(); };
+      $("u-save").onclick = async () => {
+        const nombre = $("u-nom").value.trim(), pin = $("u-pin").value.trim(), rol = $("u-rol").value;
+        if (!nombre) return toast("Escribe el nombre");
+        if (!/^\d{4,8}$/.test(pin)) return toast("PIN de 4 a 8 dígitos");
+        if (rol === "supervisor" && !selF.length) return toast("Selecciona al menos 1 fundo");
+        if (rol === "auxiliar" && !selZ.length) return toast("Selecciona al menos 1 zona");
+        const zf = rol === "admin" ? ["TODAS"] : selZ;
+        const ff = rol === "admin" ? ["TODOS"] : selF;
+        const obj = { pin, nombre, rol, perfil: rol, zona: zf.join(", "), zonas: zf, fundo: ff.join(", "), fundos: ff };
+        mergeUsers([obj]);
+        paintList();
+        $("u-nom").value = ""; $("u-pin").value = "";
+        await Promise.all([
+          api({ accion: "guardarUsuario", pin: S.pin, pinActual: pin, nuevoPin: pin, nombre, rol, perfil: rol, zona: obj.zona, zonas: zf, fundo: obj.fundo, fundos: ff }),
+          api({ accion: "cargarMaestro", pin: S.pin, nombre: "usuarios_acl", archivo: BD_FILES.usuarios_acl, reemplazar: true, data: S.users })
+        ]);
+        toast("✓ Usuario guardado en Drive");
+      };
+    }
+
+    function menuZonas(b) {
+      b.innerHTML = `
+        <div class="card">
+          <div class="row sp" style="margin-bottom:6px">
+            <span style="font-weight:800">Zonas y Fundos</span>
+            <button id="zf-ex" type="button" class="btn btn-inf btn-xs">⚡ De BD Ciclos</button>
+          </div>
+          <div class="row" style="flex-wrap:nowrap;margin-bottom:8px">
+            <input id="zf-nz" placeholder="Nueva Zona" style="flex:1" />
+            <button id="zf-az" type="button" class="btn btn-xs">+ Zona</button>
+          </div>
+          <div id="zf-list"></div>
+          <button id="zf-sv" type="button" class="btn" style="width:100%;margin-top:6px">Guardar</button>
+        </div>
+      `;
+      const paint = () => {
+        $("zf-list").innerHTML = S.zonasFundos.map((z, zi) => `
+          <div class="t-item">
+            <div class="row sp" style="margin-bottom:5px"><b style="color:var(--pri)">📍 ${esc(z.zona)}</b><button type="button" class="btn btn-d btn-xs" data-zd="${zi}">✕</button></div>
+            <div class="row" style="margin-bottom:6px">${(z.fundos || []).map((f, fi) => `<span class="badge b-new">${esc(f)} <button type="button" data-fd="${zi}:${fi}" style="all:unset;cursor:pointer;color:var(--dng);font-weight:800">✕</button></span>`).join("")}</div>
+            <div class="row" style="flex-wrap:nowrap"><input data-fi="${zi}" placeholder="Nuevo fundo" style="flex:1" /><button type="button" class="btn btn-s btn-xs" data-fa="${zi}">+ Fundo</button></div>
+          </div>
+        `).join("");
+        $("zf-list").querySelectorAll("[data-zd]").forEach(x => { x.onclick = () => { S.zonasFundos.splice(Number(x.dataset.zd), 1); paint(); }; });
+        $("zf-list").querySelectorAll("[data-fd]").forEach(x => { x.onclick = () => { const [zi, fi] = x.dataset.fd.split(":").map(Number); S.zonasFundos[zi].fundos.splice(fi, 1); paint(); }; });
+        $("zf-list").querySelectorAll("[data-fa]").forEach(x => { x.onclick = () => { const zi = Number(x.dataset.fa); const v = $("zf-list").querySelector(`[data-fi="${zi}"]`).value.trim(); if (v) { S.zonasFundos[zi].fundos.push(v); paint(); } }; });
+      };
+      paint();
+      $("zf-az").onclick = () => { const v = $("zf-nz").value.trim(); if (v) { S.zonasFundos.push({ zona: v, fundos: [] }); $("zf-nz").value = ""; paint(); } };
+      $("zf-ex").onclick = () => {
+        if (!S.M.ciclos.length) return toast("Primero sube BD Ciclos");
+        const m = new Map();
+        S.M.ciclos.forEach(c => { const z = String(c.zona || "General").trim(), f = String(c.fundo || "").trim(); if (f) { if (!m.has(z)) m.set(z, new Set()); m.get(z).add(f); } });
+        S.zonasFundos = [...m.entries()].map(([zona, s]) => ({ zona, fundos: [...s] }));
+        paint();
+      };
+      $("zf-sv").onclick = async () => {
+        store.set(CK.ZF, S.zonasFundos);
+        await api({ accion: "cargarMaestro", pin: S.pin, nombre: "zonas_fundos", archivo: BD_FILES.zonas_fundos, reemplazar: true, data: S.zonasFundos });
+        toast("✓ Guardado en Drive");
+      };
+    }
+
+    function menuPersonal(b) {
+      b.innerHTML = `
+        <div class="card">
+          <div class="row sp" style="margin-bottom:4px">
+            <div id="fp-tit" style="font-weight:800">BD Personal (${S.personal.length.toLocaleString("en-US")})</div>
+            <button id="fp-tpl" type="button" class="btn btn-s btn-xs">⬇ Plantilla Personal</button>
+          </div>
+          <p class="m" style="margin:0 0 8px">Sube la plantilla de trabajadores (ubica el encabezado en cualquier fila, extrae <b>DNI</b> y concatena <b>APELLIDO PATERNO + APELLIDO MATERNO + NOMBRES</b> en Drive).</p>
+          <label class="excel-drop" for="fp-in"><b>🪪 Importar Excel / CSV de Trabajadores</b></label>
+          <input type="file" id="fp-in" accept=".xlsx,.xls,.csv,.tsv" style="display:none" />
+          <div id="fp-st" class="m" style="font-weight:700;color:var(--pri)"></div>
+        </div>
+      `;
+      $("fp-tpl").onclick = () => {
+        if (typeof XLSX === "undefined") return toast("Cargando Excel...");
+        const headers = [
+          "#", "TIPO DE DOCUMENTO", "DNI", "APELLIDO PATERNO", "APELLIDO MATERNO",
+          "NOMBRES", "SEXO", "FECHA DE INGRESO", "FECHA DE CESE", "MOTIVO DE CESE",
+          "OBSERVACIONES", "ZONA DE PROCEDENCIA", "ESTADO"
+        ];
+        const sample = [
+          1, "DNI", "72345678", "PEREZ", "GOMEZ",
+          "JUAN CARLOS", "M", "01/05/2026", "", "",
+          "", "TRUJILLO", "ACTIVO"
+        ];
+        const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Trabajadores");
+        XLSX.writeFile(wb, "Plantilla_Lista_Trabajadores.xlsx");
+      };
+      $("fp-in").onchange = async e => {
+        const f = e.target.files[0];
+        if (!f) return;
+        try {
+          $("fp-st").style.color = "var(--inf)";
+          $("fp-st").textContent = "Buscando encabezado y procesando trabajadores...";
+          await new Promise(r => setTimeout(r, 20));
+          const rows = await leerExcel(f);
+          let h = -1, iD = -1, iP = -1, iM = -1, iN = -1, iE = -1, iC = -1;
+          for (let i = 0; i < rows.length; i++) {
+            const hs = (rows[i] || []).map(normH);
+            const d = hs.findIndex(x => x === "DNI" || x === "NRO DNI" || x === "NUMERO DE DOCUMENTO" || x.includes("DNI"));
+            const p = hs.findIndex(x => x === "APELLIDO PATERNO" || x.includes("PATERNO"));
+            const m = hs.findIndex(x => x === "APELLIDO MATERNO" || x.includes("MATERNO"));
+            const n = hs.findIndex(x => x === "NOMBRES" || x === "NOMBRE" || x.includes("NOMBRES"));
+            const es = hs.findIndex(x => x === "ESTADO" || x.includes("ESTADO"));
+            const ce = hs.findIndex(x => x === "FECHA DE CESE" || x === "FECHA CESE" || x.includes("CESE"));
+            if (d >= 0 && (n >= 0 || p >= 0)) {
+              h = i + 1;
+              iD = d; iP = p; iM = m; iN = n; iE = es; iC = ce;
+              break;
+            }
+          }
+          if (h < 0) {
+            h = 0; iD = 2; iP = 3; iM = 4; iN = 5; iE = 12; iC = 8;
+          }
+          const map = new Map();
+          rows.slice(h).forEach(r => {
+            if (!Array.isArray(r)) return;
+            const raw = normDni(r[iD]);
+            if (!raw || raw.length < 6) return;
+            const dni = raw.length === 7 ? "0" + raw : raw;
+            const pPat = iP >= 0 ? String(r[iP] ?? "").trim() : "";
+            const pMat = iM >= 0 ? String(r[iM] ?? "").trim() : "";
+            const pNom = iN >= 0 ? String(r[iN] ?? "").trim() : "";
+            const nombre = (iP >= 0 || iM >= 0)
+              ? [pPat, pMat, pNom].filter(Boolean).join(" ").replace(/\s+/g, " ").toUpperCase()
+              : pNom.replace(/\s+/g, " ").toUpperCase();
+            if (!nombre) return;
+            let est = iE >= 0 ? String(r[iE] ?? "").trim().toUpperCase() : "";
+            const ceseVal = iC >= 0 ? String(r[iC] ?? "").trim() : "";
+            if (/CESAD|BAJA|INACT/i.test(est) || (!est && ceseVal && ceseVal !== "-" && ceseVal !== "0")) est = "CESADO";
+            else if (!est) est = "ACTIVO";
+            // Solo conserva DNI, nombre completo concatenado y estado limpio
+            map.set(dni, { dni, nombre, estado: est });
+          });
+          const list = [...map.values()];
+          if (!list.length) {
+            $("fp-st").textContent = "";
+            return toast("No se encontraron trabajadores válidos con DNI y Nombres");
+          }
+          S.personal = list;
+          rebuildIndexes();
+          store.set(CK.PERS, list);
+          $("fp-tit").textContent = `BD Personal (${list.length.toLocaleString("en-US")})`;
+          $("fp-st").textContent = `Subiendo ${list.length.toLocaleString("en-US")} trabajadores a Drive...`;
+
+          const r1 = await api({ accion: "cargarPersonal", pin: S.pin, archivo: BD_FILES.personal, reemplazar: true, data: list }, { timeout: 35000 });
+          let okDrive = Boolean(r1 && r1.ok);
+          if (!okDrive) {
+            const r2 = await api({ accion: "cargarMaestro", pin: S.pin, nombre: "personal", archivo: BD_FILES.personal, reemplazar: true, data: list }, { timeout: 35000 });
+            okDrive = Boolean(r2 && r2.ok);
+          }
+
+          if (okDrive) {
+            $("fp-st").style.color = "var(--pri)";
+            $("fp-st").textContent = `✓ Guardado en Drive (${BD_FILES.personal}): ${list.length.toLocaleString("en-US")} trabajadores`;
+            toast(`✓ ${list.length.toLocaleString("en-US")} trabajadores guardados en Drive`);
+          } else {
+            $("fp-st").style.color = "var(--wrn)";
+            $("fp-st").textContent = `⚠ Listo en memoria (${list.length.toLocaleString("en-US")}), Drive tardó en responder.`;
+            toast("⚠ Cargado localmente; reintenta subir a Drive con buena señal");
+          }
+        } catch (err) { $("fp-st").textContent = ""; toast(err.message); }
+        e.target.value = "";
+      };
+    }
+
+    function menuLabores(b) {
+      b.innerHTML = `
+        <div class="card">
+          <div style="font-weight:800;margin-bottom:6px">BD Labores (${S.labores.length})</div>
+          <div style="max-height:260px;overflow-y:auto;margin-bottom:8px">
+            <table class="labor-table"><thead><tr><th>Labor</th><th style="width:72px">Cód.</th><th style="width:30px"></th></tr></thead><tbody id="lab-tb"></tbody></table>
+          </div>
+          <div class="row"><button id="lab-add" type="button" class="btn btn-s btn-xs">+ Fila</button><button id="lab-sv" type="button" class="btn btn-xs" style="flex:1">Guardar Labores</button></div>
+        </div>
+      `;
+      const paint = () => {
+        $("lab-tb").innerHTML = S.labores.map((l, i) => `<tr><td><input data-li="${i}" data-lk="nombre" value="${esc(l.nombre)}" /></td><td><input data-li="${i}" data-lk="codigo" value="${esc(l.codigo)}" /></td><td><button type="button" class="btn btn-d btn-xs" data-ld="${i}">✕</button></td></tr>`).join("");
+        $("lab-tb").oninput = e => { const i = Number(e.target.dataset.li), k = e.target.dataset.lk; if (!Number.isNaN(i) && k) S.labores[i][k] = e.target.value.toUpperCase(); };
+        $("lab-tb").onclick = e => { const d = e.target.closest("[data-ld]"); if (d) { S.labores.splice(Number(d.dataset.ld), 1); paint(); } };
+      };
+      paint();
+      $("lab-add").onclick = () => { S.labores.push({ nombre: "", codigo: "" }); paint(); };
+      $("lab-sv").onclick = async () => {
+        S.labores = S.labores.filter(l => l.nombre.trim() && l.codigo.trim());
+        rebuildIndexes();
+        store.set(CK.LAB, S.labores);
+        await api({ accion: "cargarLabores", pin: S.pin, archivo: BD_FILES.labores, reemplazar: true, data: S.labores });
+        toast("✓ Labores guardadas en Drive");
+      };
+    }
+
+    function menuCiclos(b) {
+      b.innerHTML = `
+        <div class="card">
+          <div style="font-weight:800;margin-bottom:4px">BD Ciclos, Formatos y Destinos</div>
+          <p class="m" style="margin:0 0 8px">Ciclos actuales: <b id="mc-n">${S.M.ciclos.length}</b></p>
+          <label class="excel-drop" for="fc-in"><b>🌾 Importar BD Ciclos (.xlsx / .csv)</b></label>
+          <input type="file" id="fc-in" accept=".xlsx,.xls,.csv,.tsv" style="display:none" />
+          <div style="font-weight:700;font-size:11px;margin:8px 0 4px">Formatos</div>
+          <div id="mf-c" class="row" style="margin-bottom:6px"></div>
+          <div class="row" style="flex-wrap:nowrap;margin-bottom:8px"><input id="mf-i" placeholder="Nuevo formato" style="flex:1" /><button id="mf-a" type="button" class="btn btn-s btn-xs">+</button></div>
+          <div style="font-weight:700;font-size:11px;margin:8px 0 4px">Destinos</div>
+          <div id="md-c" class="row" style="margin-bottom:6px"></div>
+          <div class="row" style="flex-wrap:nowrap"><input id="md-i" placeholder="Nuevo destino" style="flex:1" /><button id="md-a" type="button" class="btn btn-s btn-xs">+</button></div>
+        </div>
+      `;
+      const paintChip = (id, key, file) => {
+        $(id).innerHTML = S.M[key].map((v, i) => `<span class="badge b-new">${esc(v)} <button type="button" data-ci="${i}" style="all:unset;cursor:pointer;color:var(--dng);font-weight:800">✕</button></span>`).join("");
+        $(id).querySelectorAll("button").forEach(btn => { btn.onclick = async () => { S.M[key].splice(Number(btn.dataset.ci), 1); store.set(CK.MAE + key, S.M[key]); paintChip(id, key, file); await api({ accion: "cargarMaestro", pin: S.pin, nombre: key, archivo: file, reemplazar: true, data: S.M[key] }); }; });
+      };
+      paintChip("mf-c", "formatos", BD_FILES.formatos);
+      paintChip("md-c", "destinos", BD_FILES.destinos);
+      $("mf-a").onclick = async () => { const v = $("mf-i").value.trim(); if (!v) return; S.M.formatos.push(v); $("mf-i").value = ""; store.set(CK.MAE + "formatos", S.M.formatos); paintChip("mf-c", "formatos", BD_FILES.formatos); await api({ accion: "cargarMaestro", pin: S.pin, nombre: "formatos", archivo: BD_FILES.formatos, reemplazar: true, data: S.M.formatos }); };
+      $("md-a").onclick = async () => { const v = $("md-i").value.trim(); if (!v) return; S.M.destinos.push(v); $("md-i").value = ""; store.set(CK.MAE + "destinos", S.M.destinos); paintChip("md-c", "destinos", BD_FILES.destinos); await api({ accion: "cargarMaestro", pin: S.pin, nombre: "destinos", archivo: BD_FILES.destinos, reemplazar: true, data: S.M.destinos }); };
+      $("fc-in").onchange = async e => {
+        const f = e.target.files[0]; if (!f) return;
+        try {
+          const rows = await leerExcel(f);
+          let h = -1, m = {};
+          for (let i = 0; i < Math.min(rows.length, 15); i++) {
+            const hs = (rows[i] || []).map(normH);
+            const idx = { zona: hs.indexOf("ZONA"), fundo: hs.indexOf("FUNDO"), variedad: hs.indexOf("VARIEDAD"), modulo: hs.indexOf("MODULO"), area: hs.findIndex(x => x === "AREA" || x === "HA"), ciclo: hs.indexOf("CICLO") };
+            if (idx.fundo >= 0 && idx.variedad >= 0 && idx.modulo >= 0 && idx.ciclo >= 0) { h = i; m = idx; break; }
+          }
+          if (h < 0) return toast("Columnas Zona, Fundo, Variedad, Módulo y Ciclo no halladas");
+          const out = [];
+          rows.slice(h + 1).forEach(r => {
+            const fundo = String(r[m.fundo] ?? "").trim(), variedad = String(r[m.variedad] ?? "").trim(), ciclo = r[m.ciclo];
+            if (!fundo || !variedad || String(ciclo ?? "").trim() === "") return;
+            out.push({ zona: m.zona >= 0 ? String(r[m.zona] ?? "").trim() : "", fundo, variedad, modulo: Number.isFinite(Number(r[m.modulo])) ? Number(r[m.modulo]) : String(r[m.modulo]).trim(), area: m.area >= 0 ? toNum(r[m.area]) : 0, ciclo: Number.isFinite(Number(ciclo)) ? Number(ciclo) : String(ciclo).trim() });
+          });
+          if (!out.length) return toast("Sin filas válidas");
+          S.M.ciclos = out;
+          store.set(CK.MAE + "ciclos", out);
+          $("mc-n").textContent = out.length;
+          await api({ accion: "cargarMaestro", pin: S.pin, nombre: "ciclos", archivo: BD_FILES.ciclos, reemplazar: true, data: out }, { timeout: 25000 });
+          toast(`✓ ${out.length} ciclos guardados en Drive`);
+        } catch (err) { toast(err.message); }
+        e.target.value = "";
+      };
+    }
+
+    function menuApariencia(b) {
+      const isL = document.body.classList.contains("light");
+      b.innerHTML = `
+        <div class="card">
+          <div style="font-weight:800;margin-bottom:6px">Tema visual</div>
+          <div class="row" style="margin-bottom:10px">
+            <button id="th-d" type="button" class="btn ${!isL ? "" : "btn-s"} btn-xs" style="flex:1">🌙 Oscuro</button>
+            <button id="th-l" type="button" class="btn ${isL ? "" : "btn-s"} btn-xs" style="flex:1">☀️ Claro</button>
+          </div>
+          <div style="font-weight:800;margin-bottom:4px">Fondo personalizado</div>
+          <input id="bg-in" placeholder="https://..." value="${esc(store.getRaw(CK.BG, ""))}" style="margin-bottom:6px" />
+          <div class="row" style="margin-bottom:10px">
+            <button id="bg-ok" type="button" class="btn btn-xs" style="flex:1">Aplicar</button>
+            <button id="bg-no" type="button" class="btn btn-s btn-xs">Quitar</button>
+          </div>
+          <button id="sync-now" type="button" class="btn btn-inf btn-xs" style="width:100%">↻ Actualizar todas las bases de datos</button>
+        </div>
+      `;
+      $("th-d").onclick = () => { store.setRaw(CK.TH, "dark"); applyTheme("dark"); renderMenu(); };
+      $("th-l").onclick = () => { store.setRaw(CK.TH, "light"); applyTheme("light"); renderMenu(); };
+      $("bg-ok").onclick = () => { const u = $("bg-in").value.trim(); store.setRaw(CK.BG, u); applyBg(u); toast("Fondo aplicado"); };
+      $("bg-no").onclick = () => { $("bg-in").value = ""; store.del(CK.BG); applyBg(""); toast("Fondo quitado"); };
+      $("sync-now").onclick = async () => { await syncThirdPlaneDatabases(); toast("✓ Bases de datos actualizadas"); };
+    }
+
+    // =========================================================================
+    // SHELL PRINCIPAL (CONSOLIDADOS PRIMERO PARA ADMI Y AUXILIAR)
+    // =========================================================================
+    function renderShell() {
+      const sc = getScope();
+      const scTxt = isAdmin() ? "Todas las zonas y fundos" : `${sc.zonas.join(", ")}${sc.fundos.length ? " · " + sc.fundos.join(", ") : ""}`;
+      const tabs = [];
+      if (canCons()) tabs.push({ id: "resumen", label: "Consolidados" });
+      tabs.push({ id: "tareo", label: "Tareo" }, { id: "asistencia", label: "Asistencia" }, { id: "ajuste", label: "Ajuste" }, { id: "proyeccion", label: "Proyección" });
+      if (!tabs.some(t => t.id === S.activeTab)) S.activeTab = tabs[0].id;
+
+      $("app").innerHTML = `
+        <div class="wrap">
+          <div class="card user-bar">
+            <div class="user-info">
+              <div class="user-title">${esc(S.nombre)} <span class="badge b-role">${S.rol.toUpperCase()}</span></div>
+              <div class="user-sub">${esc(scTxt)}</div>
+            </div>
+            <div class="row" style="flex-shrink:0">
+              <button id="btn-f30" type="button" class="btn btn-s btn-xs" title="Carpeta Tareos 30 días">Historial de tareos</button>
+              <button id="btn-ref-all" type="button" class="btn btn-inf btn-xs">↻ Actualizar</button>
+              <button id="btn-menu" type="button" class="btn btn-s btn-xs">☰ Menú</button>
+              <button id="btn-out" type="button" class="btn btn-d btn-xs">Salir</button>
+            </div>
+          </div>
+          <div class="tabs" id="m-tabs">${tabs.map(t => `<button type="button" data-tab="${t.id}" class="${S.activeTab === t.id ? "active" : ""}">${t.label}</button>`).join("")}</div>
+          <div id="pane-resumen" class="tab-pane ${S.activeTab === "resumen" ? "active-pane" : ""}"></div>
+          <div id="pane-tareo" class="tab-pane ${S.activeTab === "tareo" ? "active-pane" : ""}"></div>
+          <div id="pane-asistencia" class="tab-pane ${S.activeTab === "asistencia" ? "active-pane" : ""}"></div>
+          <div id="pane-ajuste" class="tab-pane ${S.activeTab === "ajuste" ? "active-pane" : ""}"></div>
+          <div id="pane-proyeccion" class="tab-pane ${S.activeTab === "proyeccion" ? "active-pane" : ""}"></div>
+        </div>
+      `;
+      $("btn-f30").onclick = () => openTareoFolderModal();
+      $("btn-menu").onclick = () => openMenu(isAdmin() ? "usuarios" : "apariencia");
+      $("btn-out").onclick = () => { resetUserWorkspaceState(); S.pin = ""; renderLogin(); };
+      $("btn-ref-all").onclick = async () => {
+        $("btn-ref-all").disabled = true;
+        await syncThirdPlaneDatabases();
+        $("btn-ref-all").disabled = false;
+        if (S.activeTab === "resumen" && $("res-all")) $("res-all").click();
+        else renderShell();
+        toast("✓ Datos actualizados");
+      };
+      $("m-tabs").onclick = e => { const b = e.target.closest("[data-tab]"); if (b) { S.activeTab = b.dataset.tab; renderShell(); } };
+
+      const tk = ++S.token;
+      if (S.activeTab === "resumen") renderConsolidados(tk);
+      else if (S.activeTab === "tareo") renderTareo(tk);
+      else if (S.activeTab === "asistencia") renderAsistencia(tk);
+      else if (S.activeTab === "ajuste") abrirReporte("ajuste", tk);
+      else if (S.activeTab === "proyeccion") abrirReporte("proyeccion", tk);
+    }
+
+    // =========================================================================
+    // MÓDULO TAREO (VALIDACIÓN ESTRICTA DE CONTRATO CONTRA BD PERSONAL)
+    // =========================================================================
+    function nuevaFilaTareo() {
+      const def = S.labores[0] || { nombre: "COSECHA ARANDANO", codigo: "101" };
+      return { dni: "", nombre: "", estado: "", sinContrato: false, labor: def.nombre, codigo: def.codigo, horas: "8" };
+    }
+
+    function lookupTrabajador(dniRaw) {
+      const d = normDni(dniRaw);
+      if (!d) return null;
+      return S.personalMap.get(d) || (d.length === 7 ? S.personalMap.get("0" + d) : null) || null;
+    }
+
+    function evalFilaTareoContrato(r) {
+      const d = normDni(r.dni);
+      if (!d) return r;
+      const p = lookupTrabajador(d);
+      if (p) {
+        r.nombre = p.nombre;
+        r.estado = p.estado || "ACTIVO";
+        r.sinContrato = false;
+      } else {
+        r.nombre = TXT_NO_CONTRACT;
+        r.estado = "SIN CONTRATO";
+        r.sinContrato = true;
+      }
+      return r;
+    }
+
+    function renderTareo(tk) {
+      const pane = $("pane-tareo");
+      if (!pane) return;
+      const st = S.tareo;
+      const ck = `${CK.TAR}${S.demo ? "demo" : "live"}_${st.fecha}_${S.pin}`;
+      const cached = store.get(ck, null);
+      if (!st.filas.length && cached?.filas?.length) { st.filas = cached.filas; st.estado = cached.estado || "GUARDADO"; }
+      if (!st.filas.length) st.filas = [nuevaFilaTareo()];
+
+      const sc = getScope();
+      const fundoActivo = sc.fundos[0] || S.fundo || "TODAS";
+      const badge = st.dirty ? `<span id="t-bg" class="badge b-bor">SIN GUARDAR</span>`
+        : st.estado === "GUARDADO" ? `<span id="t-bg" class="badge b-env">GUARDADO</span>`
+        : `<span id="t-bg" class="badge b-new">NUEVO</span>`;
+      const soloLectura = st.fecha < hoyISO();
+      st.soloLectura = soloLectura;
+
+      pane.innerHTML = `
+        <div class="card">
+          <div class="row sp" style="margin-bottom:4px">
+            <div class="row">
+              <input type="date" id="t-fec" value="${st.fecha}" ${soloLectura ? "disabled" : ""} />
+              ${badge}
+            </div>
+            <div class="row">
+              <button id="t-folder" type="button" class="btn btn-s btn-xs">Carpeta</button>
+              <span class="badge b-env">${esc(isAdmin() ? "TODAS" : (sc.fundos.join(", ") || S.zona))}</span>
+            </div>
+          </div>
+          <div class="m" style="font-size:10.5px">Digita DNI o sube masivo. Si el DNI no está en BD Personal mostrará <b>NO TIENE CONTRATO</b>.</div>
+        </div>
+
+        <div class="masivo-banner" ${soloLectura ? "hidden" : ""}>
+          <div class="row sp" style="flex-wrap:nowrap">
+            <div style="min-width:0;flex:1">
+              <div style="font-weight:800;font-size:12px;color:var(--pri)">Masivo Tareo</div>
+              <div class="m" style="font-size:10.5px">Columnas: C.LABOR, DNI, NOMBRES, HORAS</div>
+            </div>
+            <button id="t-tpl" type="button" class="btn btn-s btn-xs">Descargar Plantilla</button>
+            <label for="t-file" class="btn" ${soloLectura ? "hidden" : ""}>Carga Masiva</label>
+            <input type="file" id="t-file" accept=".xlsx,.xls,.csv,.tsv" style="display:none" />
+          </div>
+        </div>
+
+        <div id="t-list"></div>
+
+        <div class="card">
+          <div class="row sp" style="margin-bottom:8px">
+            <span class="m">Trabajadores: <b id="t-cnt" style="color:var(--txt)">0</b></span>
+            <span class="m">Total horas: <b id="t-hrs" style="color:var(--pri)">0</b></span>
+          </div>
+          <button id="t-add" type="button" class="btn btn-s" style="width:100%" ${soloLectura ? "hidden" :""}>+ Agregar trabajador</button>
+          <div class="row" style="margin-top:6px">
+            <button id="t-save" type="button" class="btn" style="flex:1" ${soloLectura ? "hidden" : ""}>${st.estado === "GUARDADO" ? "Actualizar Tareo" : "Subir Tareo"}</button>
+            ${st.estado === "GUARDADO" ? `<button id="t-del" type="button" class="btn btn-d" ${soloLectura ? "hidden" : ""}>Borrar tareo</button>` : ""}
+            <button id="t-xls" type="button" class="btn btn-inf">Descargar tareo</button>
+          </div>
+        </div>
+      `;
+
+      const paintList = () => {
+        const list = $("t-list");
+        if (!list) return;
+        const opts = S.labores.map(l => `<option value="${esc(l.nombre)}">${esc(l.nombre)}</option>`).join("");
+        list.innerHTML = st.filas.map((r, i) => {
+          const sinC = r.sinContrato || r.nombre === TXT_NO_CONTRACT;
+          const ces = r.estado && /CESAD|BAJA|INACT/i.test(r.estado);
+          const bCls = sinC ? "b-bad" : (ces ? "b-bor" : "b-env");
+          return `
+            <div class="t-item ${sinC ? "no-contract" : ""}" data-ti="${i}">
+              <div class="t-top">
+                <span class="t-num">${i + 1}</span>
+                <input class="dni-in" data-tf="dni" data-ti="${i}" inputmode="numeric" maxlength="12" placeholder="DNI (8 dígitos)" value="${esc(r.dni)}" style="flex:1" ${soloLectura ? "readonly" :""} />
+                <button type="button" class="btn btn-d btn-xs" data-td="${i}" ${soloLectura ? "hidden" : ""}>✕</button>
+              </div>
+              <div class="t-name">
+                <span data-tc="nom" style="color:${sinC ? "var(--dng)" : (r.nombre ? "var(--txt)" : "var(--mut)")}">${esc(r.nombre || "Escribe el DNI para buscar su nombre...")}</span>
+                ${r.estado ? `<span data-tc="est" class="badge ${bCls}">${esc(r.estado)}</span>` : `<span data-tc="est"></span>`}
+              </div>
+              <div class="t-bot">
+                <select data-tf="labor" data-ti="${i}" style="flex:1" ${soloLectura ? "disabled" : ""}>
+                  ${r.labor && !S.labores.some(l => normK(l.nombre) === normK(r.labor)) ? `<option value="${esc(r.labor)}" selected>${esc(r.labor)}</option>` : ""}
+                  ${opts}
+                </select>
+                <span class="code-pill" data-tc="cod">${esc(r.codigo || "—")}</span>
+                <div class="hrs-box">
+                  <button type="button" data-th="-" data-ti="${i}" ${soloLectura ? "hidden" : ""}>−</button>
+                  <input data-tf="horas" data-ti="${i}" inputmode="decimal" value="${esc(r.horas)}" ${soloLectura ? "readonly" : ""} />
+                  <button type="button" data-th="+" data-ti="${i}" ${soloLectura ? "hidden" : ""}>+</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join("");
+        st.filas.forEach((r, i) => { const s = list.querySelector(`select[data-ti="${i}"]`); if (s && r.labor) s.value = r.labor; });
+        updTot();
+      };
+
+      const updTot = () => {
+        const v = st.filas.filter(r => normDni(r.dni));
+        if ($("t-cnt")) $("t-cnt").textContent = v.length;
+        if ($("t-hrs")) $("t-hrs").textContent = v.reduce((a, r) => a + toNum(r.horas), 0).toFixed(1).replace(/\.0$/, "");
+      };
+
+      const dirty = () => {
+        if (soloLectura) return;
+        st.dirty = true;
+        store.set(ck, { filas: st.filas, estado: st.estado, dirty: true });
+        if ($("t-bg")) { $("t-bg").className = "badge b-bor"; $("t-bg").textContent = "SIN GUARDAR"; }
+      };
+
+      paintList();
+      $("t-folder").onclick = () => openTareoFolderModal();
+
+      $("t-list").oninput = e => {
+        if (soloLectura) return;
+        const t = e.target, i = Number(t.dataset.ti), f = t.dataset.tf;
+        if (Number.isNaN(i) || !f) return;
+        const r = st.filas[i];
+        r[f] = t.value;
+        if (f === "dni") {
+          const card = $("t-list").querySelector(`[data-ti="${i}"]`);
+          const nomEl = card?.querySelector(`[data-tc="nom"]`), estEl = card?.querySelector(`[data-tc="est"]`);
+          const d = normDni(t.value);
+          if (!d) {
+            r.nombre = ""; r.estado = ""; r.sinContrato = false;
+            if (card) card.classList.remove("no-contract");
+            if (nomEl) { nomEl.textContent = "Escribe el DNI para buscar su nombre..."; nomEl.style.color = "var(--mut)"; }
+            if (estEl) { estEl.className = ""; estEl.textContent = ""; }
+          } else {
+            evalFilaTareoContrato(r);
+            if (card) card.classList.toggle("no-contract", r.sinContrato);
+            if (nomEl) { nomEl.textContent = r.nombre; nomEl.style.color = r.sinContrato ? "var(--dng)" : "var(--txt)"; }
+            if (estEl) {
+              const ces = /CESAD|BAJA|INACT/i.test(r.estado);
+              estEl.className = `badge ${r.sinContrato ? "b-bad" : (ces ? "b-bor" : "b-env")}`;
+              estEl.textContent = r.estado;
+            }
+          }
+        }
+        updTot();
+        dirty();
+      };
+
+      $("t-list").onchange = e => {
+        if (soloLectura) return;
+        const t = e.target, i = Number(t.dataset.ti);
+        if (t.dataset.tf === "labor" && !Number.isNaN(i)) {
+          const r = st.filas[i];
+          r.labor = t.value;
+          r.codigo = S.laboresMap.get(normK(r.labor)) || r.codigo || "";
+          const cEl = $("t-list").querySelector(`[data-ti="${i}"] [data-tc="cod"]`);
+          if (cEl) cEl.textContent = r.codigo || "—";
+          dirty();
+        }
+      };
+
+      $("t-list").onclick = e => {
+        if (soloLectura) return;
+        const del = e.target.closest("[data-td]");
+        if (del) { st.filas.splice(Number(del.dataset.td), 1); if (!st.filas.length) st.filas.push(nuevaFilaTareo()); dirty(); paintList(); return; }
+        const hb = e.target.closest("[data-th]");
+        if (hb) {
+          const i = Number(hb.dataset.ti), r = st.filas[i];
+          r.horas = String(Math.max(0, Math.min(24, toNum(r.horas) + (hb.dataset.th === "+" ? 1 : -1))));
+          const inp = $("t-list").querySelector(`input[data-tf="horas"][data-ti="${i}"]`);
+          if (inp) inp.value = r.horas;
+          updTot(); dirty();
+        }
+      };
+
+      $("t-fec").onchange = e => { if (!soloLectura && e.target.value) { st.fecha = e.target.value; st.soloLectura = st.fecha < hoyISO(); st.filas = []; st.dirty = false; st.estado = "NUEVO"; renderTareo(++S.token); } };
+      $("t-add").onclick = () => { if (soloLectura) return; st.filas.push(nuevaFilaTareo()); dirty(); paintList(); };
+
+      $("t-tpl").onclick = () => {
+        if (soloLectura) return;
+        if (typeof XLSX === "undefined") return toast("Cargando Excel...");
+        const ws = XLSX.utils.aoa_to_sheet([["C.LABOR", "DNI", "NOMBRES", "HORAS"], ["101", "72345678", "", 8]]);
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Tareo");
+        XLSX.writeFile(wb, "Plantilla_Tareo.xlsx");
+      };
+
+      $("t-file").onchange = async e => {
+        if (soloLectura) return;
+        const f = e.target.files[0]; if (!f) return;
+        try {
+          const rows = await leerExcel(f);
+          let h = 0, iC = 0, iD = 1, iH = 3;
+          for (let i = 0; i < Math.min(rows.length, 10); i++) {
+            const hs = (rows[i] || []).map(normH);
+            const d = hs.findIndex(x => x.includes("DNI"));
+            if (d >= 0) { h = i + 1; iD = d; const c = hs.findIndex(x => x.includes("LABOR") || x.includes("COD")); const hr = hs.findIndex(x => x.includes("HORA")); if (c >= 0) iC = c; if (hr >= 0) iH = hr; break; }
+          }
+          const imp = [];
+          let sinContratoCount = 0;
+          rows.slice(h).forEach(r => {
+            const dni = normDni(r[iD]); if (!dni) return;
+            const cod = String(r[iC] ?? "").trim();
+            const lh = S.labores.find(l => String(l.codigo) === cod);
+            const item = evalFilaTareoContrato({
+              dni, nombre: "", estado: "", sinContrato: false,
+              codigo: cod || (lh ? lh.codigo : "101"),
+              labor: lh ? lh.nombre : (S.labores[0]?.nombre || "COSECHA ARANDANO"),
+              horas: String(toNum(r[iH]) || 8)
+            });
+            if (item.sinContrato) sinContratoCount++;
+            imp.push(item);
+          });
+          if (!imp.length) return toast("No se hallaron DNIs");
+          st.filas = [...st.filas.filter(x => normDni(x.dni)), ...imp];
+          dirty(); paintList();
+          if (sinContratoCount > 0) toast(`⚠ ${imp.length} filas cargadas (${sinContratoCount} SIN CONTRATO)`, 3500);
+          else toast(`✓ ${imp.length} filas importadas`);
+        } catch (err) { toast(err.message); }
+        e.target.value = "";
+      };
+
+      $("t-xls").onclick = () => {
+        if (typeof XLSX === "undefined") return toast("Cargando Excel...");
+        const v = st.filas.filter(r => normDni(r.dni));
+        const aoa = [["C.LABOR", "DNI", "NOMBRES", "HORAS", "FUNDO"]];
+        v.forEach(r => aoa.push([r.codigo, r.dni, r.nombre, toNum(r.horas), fundoActivo]));
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Tareo");
+        XLSX.writeFile(wb, `Tareo_${st.fecha}.xlsx`);
+      };
+
+      $("t-save").onclick = async () => {
+        if (soloLectura) { toast("No se puede editar un tareo de fecha anterior"); return; }
+        const v = st.filas.filter(r => normDni(r.dni));
+        if (!v.length) return toast("Agrega al menos un DNI");
+        const btn = $("t-save"); btn.disabled = true; btn.textContent = "Guardando...";
+        const scN = getScope();
+        const r = await api({ accion: "guardarTareo", pin: S.pin, usuario: S.nombre, rol: S.rol, zona: scN.zonas.join(", "), fundo: scN.fundos.join(", "), fecha: st.fecha, filas: v });
+        btn.disabled = false;
+        st.filas = v; st.dirty = false; st.estado = "GUARDADO"; st.histOk = false;
+        store.set(ck, { filas: v, estado: "GUARDADO", dirty: false, ts: Date.now() });
+        renderTareo(++S.token);
+        toast(r?.ok ? "✓ Tareo guardado en Drive" : "⚠ Guardado local");
+      };
+
+      if ($("t-del")) {
+        $("t-del").onclick = async () => {
+          if (soloLectura) { toast("No se puede eliminar un tareo de fecha anterior"); return; }
+          if (!(await confirmar("Borrar tareo", `¿Eliminar el tareo de la fecha ${fmtDMY(st.fecha)}?`))) return;
+          await api({ accion: "borrarTareo", pin: S.pin, fecha: st.fecha });
+          store.del(ck);
+          st.filas = [nuevaFilaTareo()]; st.estado = "NUEVO"; st.dirty = false; st.histOk = false;
+          renderTareo(++S.token);
+          toast("Tareo eliminado");
+        };
+      }
+
+      if (!cached || !cached.ts || (Date.now() - cached.ts) > TTL_MS) {
+        api({ accion: "getTareo", pin: S.pin, fecha: st.fecha }).then(r => {
+          if (S.token !== tk || S.activeTab !== "tareo" || st.dirty) return;
+          if (r?.ok && r.data?.filas?.length) {
+            st.filas = r.data.filas.map(x => S.personal.length ? evalFilaTareoContrato({ ...x }) : x);
+            st.estado = "GUARDADO";
+            store.set(ck, { filas: st.filas, estado: "GUARDADO", dirty: false, ts: Date.now() });
+            renderTareo(++S.token);
+          }
+        });
+      }
+    }
+
+    // =========================================================================
+    // MÓDULO ASISTENCIA (CON EDICIÓN E HISTORIAL 30 DÍAS)
+    // =========================================================================
+    function nuevaFilaAsis() {
+      const fd = repFundosDisponibles();
+      return { fundo: fd[0] || S.fundo || "", grupo: "1", supervisor: S.nombre || "", cosecha: "", supCiclo: "", supCuadrilla: "", jabero: "", limpieza: "", riego: "", otros: "" };
+    }
+    const totAsis = r => ["cosecha", "supCiclo", "supCuadrilla", "jabero", "limpieza", "riego", "otros"].reduce((s, k) => s + toNum(r[k]), 0);
+
+    function renderAsistencia(tk) {
+      const pane = $("pane-asistencia");
+      if (!pane) return;
+      const st = S.asis;
+      const ck = `${CK.ASI}${S.demo ? "demo" : "live"}_${st.fecha}_${S.pin}`;
+      const cached = store.get(ck, null);
+      if (!st.filas.length && cached?.filas?.length) { st.filas = cached.filas; st.estado = cached.estado || "GUARDADO"; }
+      if (!st.filas.length) st.filas = [nuevaFilaAsis()];
+
+      const fd = repFundosDisponibles();
+      const badge = st.dirty ? `<span id="a-bg" class="badge b-bor">SIN GUARDAR</span>`
+        : st.estado === "GUARDADO" ? `<span id="a-bg" class="badge b-env">GUARDADO</span>`
+        : `<span id="a-bg" class="badge b-new">NUEVO</span>`;
+
+      pane.innerHTML = `
+        <div class="card">
+          <div class="row sp" style="margin-bottom:6px">
+            <div class="row"><input type="date" id="a-fec" value="${st.fecha}" />${badge}</div>
+            <span class="m">Distribución diaria</span>
+          </div>
+          <div class="row" style="flex-wrap:nowrap">
+            <select id="a-hist" style="flex:1;font-size:11px"><option value="">Mis asistencias (últimos 30 días)...</option></select>
+            <button id="a-load" type="button" class="btn btn-s btn-xs">Editar</button>
+          </div>
+        </div>
+        <div class="masivo-banner">
+          <div class="row sp" style="flex-wrap:nowrap">
+            <div style="min-width:0;flex:1"><div style="font-weight:800;font-size:12px;color:var(--pri)">Masivo Asistencia</div><div class="m" style="font-size:10.5px">Importar distribución por grupos</div></div>
+            <label for="a-file" class="btn">Carga Masiva</label>
+            <input type="file" id="a-file" accept=".xlsx,.xls,.csv,.tsv" style="display:none" />
+          </div>
+        </div>
+        <div id="a-list"></div>
+        <div class="card">
+          <div class="row sp" style="margin-bottom:8px"><span class="m">Grupos: <b id="a-g" style="color:var(--txt)">0</b></span><span class="m">Total: <b id="a-t" style="color:var(--pri)">0</b></span></div>
+          <button id="a-add" type="button" class="btn btn-s" style="width:100%">Agregar Grupo</button>
+          <div class="row" style="margin-top:6px">
+            <button id="a-save" type="button" class="btn" style="flex:1">${st.estado === "GUARDADO" ? "Actualizar Asistencia" : "Subir Asistencia"}</button>
+            ${st.estado === "GUARDADO" ? `<button id="a-del" type="button" class="btn btn-d">Borrar</button>` : ""}
+            <button id="a-xls" type="button" class="btn btn-inf">Descargar asistencia</button>
+          </div>
+        </div>
+      `;
+
+      const fillHist = list => {
+        const sel = $("a-hist");
+        if (!sel) return;
+        sel.innerHTML = `<option value="">Mis asistencias (30 días: ${list.length})...</option>` + list.map(it => `<option value="${it.fecha}" ${it.fecha === st.fecha ? "selected" : ""}>${fmtDMY(it.fecha)} · ${(it.filas || []).length} grupo(s)</option>`).join("");
+      };
+      if (st.histOk) fillHist(st.hist);
+      else fetchUserHistory30d("asistencia").then(l => { st.hist = l; st.histOk = true; if (S.token === tk) fillHist(l); });
+
+      $("a-load").onclick = () => {
+        const f = $("a-hist")?.value; if (!f) return toast("Elige una fecha");
+        const hit = st.hist.find(x => x.fecha === f);
+        st.fecha = f; st.filas = hit?.filas ? hit.filas.map(x => ({ ...x })) : []; st.estado = "GUARDADO"; st.dirty = false;
+        renderAsistencia(++S.token);
+      };
+
+      const paint = () => {
+        $("a-list").innerHTML = st.filas.map((r, i) => {
+          const of = fd.length ? `<select data-af="fundo" data-ai="${i}">${fd.map(f => `<option value="${esc(f)}" ${fundoKey(f) === fundoKey(r.fundo) ? "selected" : ""}>${esc(f)}</option>`).join("")}</select>` : `<input data-af="fundo" data-ai="${i}" value="${esc(r.fundo)}" />`;
+          return `
+            <div class="dist-card">
+              <div class="row sp" style="margin-bottom:5px"><span class="badge b-new">Grupo #${i + 1}</span><button type="button" class="btn btn-d btn-xs" data-ad="${i}">✕</button></div>
+              <div class="dist-grid" style="grid-template-columns:1.2fr .7fr 1.3fr">
+                <div class="dist-cell"><label>Fundo</label>${of}</div>
+                <div class="dist-cell"><label>N° Grupo</label><input data-af="grupo" data-ai="${i}" value="${esc(r.grupo)}" /></div>
+                <div class="dist-cell"><label>Supervisor</label><input data-af="supervisor" data-ai="${i}" placeholder="Ej. Jordy Garcia"/></div>
+              </div>
+              <div class="dist-grid">
+                ${[["cosecha","Cosecha"],["supCiclo","Sup.Ciclo"],["supCuadrilla","Sup.Cuad."],["jabero","Jabero"],["limpieza","Limpieza"],["riego","Riego"],["otros","Otros"]].map(([k, lb]) => `<div class="dist-cell"><label>${lb}</label><input data-af="${k}" data-ai="${i}" inputmode="numeric" placeholder="0" value="${esc(r[k])}" /></div>`).join("")}
+                <div class="dist-cell"><label>TOTAL</label><div class="dist-total-box" data-at="${i}">${totAsis(r)}</div></div>
+              </div>
+            </div>
+          `;
+        }).join("");
+        $("a-g").textContent = st.filas.length;
+        $("a-t").textContent = st.filas.reduce((s, r) => s + totAsis(r), 0);
+      };
+      const dirty = () => { st.dirty = true; store.set(ck, { filas: st.filas, estado: st.estado, dirty: true }); if ($("a-bg")) { $("a-bg").className = "badge b-bor"; $("a-bg").textContent = "SIN GUARDAR"; } };
+      paint();
+
+      $("a-list").oninput = e => {
+        const t = e.target, i = Number(t.dataset.ai), f = t.dataset.af;
+        if (Number.isNaN(i) || !f) return;
+        st.filas[i][f] = t.value;
+        const bx = $("a-list").querySelector(`[data-at="${i}"]`); if (bx) bx.textContent = totAsis(st.filas[i]);
+        $("a-t").textContent = st.filas.reduce((s, r) => s + totAsis(r), 0);
+        dirty();
+      };
+      $("a-list").onchange = e => { const t = e.target, i = Number(t.dataset.ai), f = t.dataset.af; if (!Number.isNaN(i) && f) { st.filas[i][f] = t.value; dirty(); } };
+      $("a-list").onclick = e => { const d = e.target.closest("[data-ad]"); if (d) { st.filas.splice(Number(d.dataset.ad), 1); if (!st.filas.length) st.filas.push(nuevaFilaAsis()); dirty(); paint(); } };
+      $("a-fec").onchange = e => { if (e.target.value) { st.fecha = e.target.value; st.filas = []; st.dirty = false; st.estado = "NUEVO"; renderAsistencia(++S.token); } };
+      $("a-add").onclick = () => { st.filas.push(nuevaFilaAsis()); dirty(); paint(); };
+
+      $("a-file").onchange = async e => {
+        const f = e.target.files[0]; if (!f) return;
+        try {
+          const rows = await leerExcel(f);
+          let h = 0;
+          for (let i = 0; i < Math.min(rows.length, 10); i++) { const hs = (rows[i] || []).map(normH); if (hs.some(x => x.includes("FUNDO")) && hs.some(x => x.includes("COSECHA"))) { h = i + 1; break; } }
+          const imp = [];
+          rows.slice(h).forEach(r => {
+            const fnd = String(r[1] ?? "").trim(), sup = String(r[3] ?? "").trim();
+            if ((!fnd && !sup) || /TOTAL|SUMA/i.test(fnd) || /TOTAL|SUMA/i.test(sup)) return;
+            imp.push({ fundo: repFundoCanon(fnd) || fnd, grupo: String(r[2] ?? "").trim(), supervisor: sup, cosecha: String(toNum(r[4]) || ""), supCiclo: String(toNum(r[5]) || ""), supCuadrilla: String(toNum(r[6]) || ""), jabero: String(toNum(r[7]) || ""), limpieza: String(toNum(r[8]) || ""), riego: String(toNum(r[9]) || ""), otros: String(toNum(r[10]) || "") });
+          });
+          if (!imp.length) return toast("Sin filas válidas");
+          st.filas = imp; dirty(); paint(); toast(`✓ ${imp.length} grupos importados`);
+        } catch (err) { toast(err.message); }
+        e.target.value = "";
+      };
+
+      $("a-xls").onclick = () => {
+        if (typeof XLSX === "undefined") return toast("Cargando Excel...");
+        const aoa = [["Fecha", "Fundo", "N° Grupo", "Supervisor", "Cosecha", "Sup.Ciclo", "Sup.Cuadrilla", "Jabero", "Limpieza", "Riego", "Otros", "total"]];
+        st.filas.forEach(r => aoa.push([fmtDMY(st.fecha), r.fundo, r.grupo, r.supervisor, toNum(r.cosecha), toNum(r.supCiclo), toNum(r.supCuadrilla), toNum(r.jabero), toNum(r.limpieza), toNum(r.riego), toNum(r.otros), totAsis(r)]));
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Asistencia");
+        XLSX.writeFile(wb, `Asistencia_${st.fecha}.xlsx`);
+      };
+
+      $("a-save").onclick = async () => {
+        const btn = $("a-save"); btn.disabled = true; btn.textContent = "Guardando...";
+        const scN = getScope();
+        const r = await api({ accion: "guardarAsistencia", pin: S.pin, usuario: S.nombre, rol: S.rol, zona: scN.zonas.join(", "), fundo: scN.fundos.join(", "), fecha: st.fecha, filas: st.filas });
+        btn.disabled = false; st.dirty = false; st.estado = "GUARDADO"; st.histOk = false;
+        store.set(ck, { filas: st.filas, estado: "GUARDADO", dirty: false, ts: Date.now() });
+        renderAsistencia(++S.token);
+        toast(r?.ok ? "Asistencia guardada" : "Guardado local");
+      };
+
+      if ($("a-del")) {
+        $("a-del").onclick = async () => {
+          if (!(await confirmar("Borrar asistencia", `¿Eliminar asistencia del ${fmtDMY(st.fecha)}?`))) return;
+          await api({ accion: "borrarAsistencia", pin: S.pin, fecha: st.fecha });
+          store.del(ck);
+          st.filas = [nuevaFilaAsis()]; st.estado = "NUEVO"; st.dirty = false; st.histOk = false;
+          renderAsistencia(++S.token);
+          toast("Asistencia eliminada");
+        };
+      }
+
+      if (!cached || !cached.ts || (Date.now() - cached.ts) > TTL_MS) {
+        api({ accion: "getAsistencia", pin: S.pin, fecha: st.fecha }).then(r => {
+          if (S.token !== tk || S.activeTab !== "asistencia" || st.dirty) return;
+          if (r?.ok && r.data?.filas?.length) { st.filas = r.data.filas; st.estado = "GUARDADO"; store.set(ck, { filas: st.filas, estado: "GUARDADO", dirty: false, ts: Date.now() }); renderAsistencia(++S.token); }
+        });
+      }
+    }
+
+    // =========================================================================
+    // MÓDULOS AJUSTE Y PROYECCIÓN (EDICIÓN + HISTORIAL + FUNDO + PNG)
+    // =========================================================================
+    const REP_CFG = {
+      ajuste: { titulo: "Ajuste", nota: "Fecha modificable para editar días anteriores. Campos manuales visibles; Semana, Tipo y Fundo van al consolidado." },
+      proyeccion: { titulo: "Proyección", nota: "Fecha predeterminada mañana (+1 día, editable). Campos ocultos se completan en el consolidado." }
+    };
+    const REP_COLS = ["semana", "fecha", "tipo", "fundo", "modulo", "variedad", "ciclo", "formato", "destino", "dias", "ha", "kgHa", "jornales", "kilos", "kgJor"];
+    const REP_FIELDS = {
+      ajuste: ["fundo", "modulo", "variedad", "ciclo", "formato", "destino", "dias", "ha", "kgHa", "jornales", "kilos", "kgJor"],
+      proyeccion: ["fundo", "modulo", "variedad", "ciclo", "dias", "ha", "kgHa", "jornales", "kilos", "kgJor"]
+    };
+    const REP_LBL = { semana: "Semana", fecha: "Fecha", tipo: "Tipo", fundo: "Fundo", modulo: "Módulo", variedad: "Variedad", ciclo: "Ciclo", formato: "Formato", destino: "Destino", dias: "Días Reing.", ha: "Ha", kgHa: "Kg/Ha", jornales: "Jornales", kilos: "Kilos", kgJor: "Kg/Jornal" };
+
+    const calcKilos = r => toNum(r.ha) * toNum(r.kgHa);
+    const calcKgJor = r => { const j = toNum(r.jornales); return j > 0 ? calcKilos(r) / j : 0; };
+    const fmtKilos = n => Math.round(n).toLocaleString("en-US");
+    const fmtKgJor = n => n.toFixed(1);
+
+    function repFundosDisponibles() {
+      const sc = getScope(), all = uniq(S.M.ciclos.map(c => c.fundo));
+      if (sc.fundos.length) return !all.length ? sc.fundos : sc.fundos.map(sf => all.find(cf => fundoKey(cf) === fundoKey(sf)) || sf);
+      return all;
+    }
+    const repDelFundo = f => S.M.ciclos.filter(c => fundoKey(c.fundo) === fundoKey(f));
+    const repModulos = f => f ? uniq(repDelFundo(f).map(c => String(c.modulo))).sort((a, b) => Number(a) - Number(b)) : [];
+    const repVariedades = (f, m) => {
+      if (!f) return [];
+      let l = repDelFundo(f);
+      if (modKey(m) !== "") l = l.filter(c => modKey(c.modulo) === modKey(m));
+      return uniq(l.map(c => c.variedad)).sort();
+    };
+    const repCiclo = (f, m, v) => {
+      if (!f || modKey(m) === "" || !v) return "";
+      const c = S.M.ciclos.find(x => fundoKey(x.fundo) === fundoKey(f) && modKey(x.modulo) === modKey(m) && normK(x.variedad) === normK(v));
+      return c ? String(c.ciclo) : "";
+    };
+    const repFundoCanon = v => { const t = String(v ?? "").trim(); const h = S.M.ciclos.find(c => fundoKey(c.fundo) === fundoKey(t)); return h ? h.fundo : t; };
+    const repVarCanon = (f, v) => { const t = String(v ?? "").trim(); const h = repDelFundo(f).find(c => normK(c.variedad) === normK(t)); return h ? h.variedad : t; };
+
+    function repNuevaFila() {
+      const fd = repFundosDisponibles(), f = fd.length === 1 ? fd[0] : (fd[0] || S.fundo || "");
+      const ms = repModulos(f), m = ms.length === 1 ? ms[0] : "";
+      const vs = m ? repVariedades(f, m) : [], v = vs.length === 1 ? vs[0] : "";
+      return { fundo: f, modulo: m, variedad: v, ciclo: repCiclo(f, m, v), formato: "", destino: "", dias: "", ha: "", kgHa: "", jornales: "" };
+    }
+    const repVacia = r => ["modulo", "variedad", "formato", "destino", "dias", "ha", "kgHa", "jornales"].every(k => String(r[k] ?? "").trim() === "");
+    const repNorm = r => ({ fundo: String(r.fundo ?? ""), modulo: String(r.modulo ?? ""), variedad: String(r.variedad ?? ""), ciclo: String(r.ciclo ?? ""), formato: String(r.formato ?? ""), destino: String(r.destino ?? ""), dias: String(r.dias ?? ""), ha: String(r.ha ?? ""), kgHa: String(r.kgHa ?? ""), jornales: String(r.jornales ?? "") });
+
+    function repVal(c, r) {
+      if (c === "semana") return isoWeek(r.fecha);
+      if (c === "fecha") return fmtDMY(r.fecha);
+      if (c === "tipo") return "Cosecha";
+      if (c === "kilos") return calcKilos(r);
+      if (c === "kgJor") return calcKgJor(r);
+      if (["dias", "ha", "kgHa", "jornales"].includes(c)) return String(r[c] ?? "").trim() === "" ? "" : toNum(r[c]);
+      return r[c] ?? "";
+    }
+
+    function repExcel(tipo, filas, filename, soloManual = false) {
+      if (typeof XLSX === "undefined") return toast("Cargando Excel...");
+      const cols = soloManual ? REP_FIELDS[tipo] : REP_COLS;
+      const aoa = [cols.map(c => REP_LBL[c])];
+      filas.forEach(r => aoa.push(cols.map(c => repVal(c, r))));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, REP_CFG[tipo].titulo);
+      XLSX.writeFile(wb, filename);
+    }
+
+    function repImagen(tipo, filasRaw, subFec) {
+      const filas = (filasRaw || []).filter(r => !repVacia(r)).map(r => ({ ...repNorm(r), fecha: r.fecha || S.rep[tipo].fecha }));
+      if (!filas.length) return toast("Agrega al menos una fila");
+      const ha = filas.reduce((s, r) => s + toNum(r.ha), 0), ki = filas.reduce((s, r) => s + calcKilos(r), 0), jo = filas.reduce((s, r) => s + toNum(r.jornales), 0);
+      const wCol = REP_COLS.map(c => ({ semana: 56, fecha: 80, tipo: 66, fundo: 100, modulo: 56, variedad: 108, ciclo: 50, formato: 84, destino: 72, dias: 70, ha: 62, kgHa: 72, jornales: 66, kilos: 84, kgJor: 74 }[c] || 74));
+      const W = 40 + wCol.reduce((a, b) => a + b, 0), H = 132 + (filas.length + 1) * 30;
+      const cv = document.createElement("canvas"); cv.width = W * 2; cv.height = H * 2;
+      const ctx = cv.getContext("2d"); ctx.scale(2, 2);
+      const theme = getComputedStyle(document.body);
+      const color = name => theme.getPropertyValue(name).trim();
+      ctx.fillStyle = color("--color-background-image"); ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = color("--color-primary"); ctx.fillRect(20, 18, W - 40, 32);
+      ctx.fillStyle = color("--color-primary-contrast"); ctx.font = "800 13px sans-serif";
+      ctx.fillText(`${APP_NAME} · ${REP_CFG[tipo].titulo.toUpperCase()} · ${subFec}`, 30, 38);
+      ctx.fillStyle = color("--color-text-muted"); ctx.font = "700 11px sans-serif";
+      ctx.fillText(`Ha: ${ha.toFixed(2)} | Kilos: ${fmtKilos(ki)} | Jornales: ${jo} | Kg/Jornal: ${jo > 0 ? fmtKgJor(ki / jo) : "0.0"}`, 20, 66);
+      ctx.fillStyle = color("--color-surface-raised"); ctx.fillRect(20, 78, W - 40, 32);
+      let x = 20; ctx.fillStyle = color("--color-primary"); ctx.font = "700 10px sans-serif";
+      REP_COLS.forEach((c, i) => { ctx.fillText(REP_LBL[c], x + 5, 98); x += wCol[i]; });
+      const rows = [...filas.map(r => REP_COLS.map(c => c === "kilos" ? fmtKilos(repVal(c, r)) : c === "kgJor" ? fmtKgJor(repVal(c, r)) : String(repVal(c, r)))),
+        REP_COLS.map(c => c === "semana" ? "TOTAL" : c === "ha" ? ha.toFixed(2) : c === "kilos" ? fmtKilos(ki) : c === "jornales" ? String(jo) : c === "kgJor" ? (jo > 0 ? fmtKgJor(ki / jo) : "0.0") : "")];
+      rows.forEach((r, ri) => {
+        const y = 110 + ri * 30, tot = ri === rows.length - 1;
+        ctx.fillStyle = tot ? color("--color-success-soft") : (ri % 2 ? color("--color-surface-image") : color("--color-row-alt-image"));
+        ctx.fillRect(20, y, W - 40, 30);
+        let cx = 20; ctx.fillStyle = color("--color-text-image"); ctx.font = tot ? "700 10.5px sans-serif" : "500 10.5px sans-serif";
+        r.forEach((v, ci) => { ctx.fillText(String(v).slice(0, 18), cx + 5, y + 19); cx += wCol[ci]; });
+      });
+      abrirModalImagen(`Vista previa imagen de · ${REP_CFG[tipo].titulo}`, "Columnas completas y totales", cv.toDataURL("image/png"), `${REP_CFG[tipo].titulo}_${subFec.replace(/\//g, "-")}.png`);
+    }
+
+    function renderRepIngreso(tipo) {
+      const body = $("rep-body");
+      if (!body || S.activeTab !== tipo) return;
+      const st = S.rep[tipo], cfg = REP_CFG[tipo], sc = getScope();
+      if (!st.filas.length) st.filas = [repNuevaFila()];
+      const ck = `${CK.REPD}${S.demo ? "demo" : "live"}_${tipo}_${st.fecha}_${S.pin}`;
+      const badge = st.dirty ? `<span id="rb" class="badge b-bor">SIN GUARDAR</span>` : st.estado === "GUARDADO" ? `<span id="rb" class="badge b-env">GUARDADO</span>` : `<span id="rb" class="badge b-new">NUEVO</span>`;
+
+      body.innerHTML = `
+        <div class="card">
+          <div class="row sp" style="margin-bottom:6px">
+            <div class="row"><input type="date" id="rf" value="${st.fecha}" />${badge}</div>
+            <div class="row"><button id="r-img" type="button" class="btn btn-inf btn-xs">Descargar Imagen</button><span class="badge b-env">${esc(isAdmin() ? "TODAS" : (sc.zonas.join(", ") || S.zona))}</span></div>
+          </div>
+          <div class="row" style="flex-wrap:nowrap;margin-bottom:5px">
+            <select id="r-hist" style="flex:1;font-size:11px"><option value="">Mis ${cfg.titulo.toLowerCase()}s (últimos 30 días)...</option></select>
+            <button id="r-load" type="button" class="btn btn-s btn-xs">Editar</button>
+          </div>
+          <div class="m" style="font-size:10.5px">${cfg.nota}</div>
+        </div>
+        <div class="masivo-banner">
+          <div class="row sp" style="flex-wrap:nowrap">
+            <div style="min-width:0;flex:1"><div style="font-weight:800;font-size:12px;color:var(--pri)">Masivo ${cfg.titulo}</div><div class="m" style="font-size:10.5px">Plantilla o carga directa</div></div>
+            <button id="r-tpl" type="button" class="btn btn-s btn-xs">Descargar Plantilla</button>
+            <label for="r-fl" class="btn">Carga Masiva</label>
+            <input type="file" id="r-fl" accept=".xlsx,.xls,.csv,.tsv" style="display:none" />
+          </div>
+        </div>
+        <div id="r-list"></div>
+        <div class="card" id="r-tot"></div>
+        <div class="card">
+          <button id="r-add" type="button" class="btn btn-s" style="width:100%">Añadir fila</button>
+          <div class="row" style="margin-top:6px">
+            <button id="r-sv" type="button" class="btn" style="flex:1">${st.estado === "GUARDADO" ? "Actualizar datos" : "Subir datos"}</button>
+            ${st.estado === "GUARDADO" ? `<button id="r-dl" type="button" class="btn btn-d">Borrar Ajuste</button>` : ""}
+          </div>
+        </div>
+      `;
+
+      const fillH = list => {
+        const sel = $("r-hist"); if (!sel) return;
+        sel.innerHTML = `<option value="">Mis ${cfg.titulo.toLowerCase()}s (30 días: ${list.length})...</option>` + list.map(it => `<option value="${it.fecha}" ${it.fecha === st.fecha ? "selected" : ""}>${fmtDMY(it.fecha)} · ${(it.filas || []).length} fila(s)</option>`).join("");
+      };
+      if (st.histOk) fillH(st.hist);
+      else fetchUserHistory30d(tipo).then(l => { st.hist = l; st.histOk = true; fillH(l); });
+
+      $("r-load").onclick = () => {
+        const f = $("r-hist")?.value; if (!f) return toast("Elige una fecha");
+        const hit = st.hist.find(x => x.fecha === f);
+        st.fecha = f; st.filas = hit?.filas ? hit.filas.map(repNorm) : []; st.estado = "GUARDADO"; st.dirty = false;
+        renderRepIngreso(tipo);
+      };
+
+      const paintTot = () => {
+        const ha = st.filas.reduce((s, r) => s + toNum(r.ha), 0), ki = st.filas.reduce((s, r) => s + calcKilos(r), 0), jo = st.filas.reduce((s, r) => s + toNum(r.jornales), 0);
+        $("r-tot").innerHTML = `<div class="kpis" style="margin:0"><div class="kpi"><span class="m">Ha</span><b>${ha.toFixed(2)}</b></div><div class="kpi"><span class="m">Kilos</span><b>${fmtKilos(ki)}</b></div><div class="kpi"><span class="m">Jornales</span><b>${jo}</b></div><div class="kpi"><span class="m">Kg/Jornal</span><b>${jo > 0 ? fmtKgJor(ki / jo) : "0.0"}</b></div></div>`;
+      };
+
+      const paint = () => {
+        $("r-list").innerHTML = st.filas.map((r, i) => `
+          <div class="dist-card" data-c="${i}">
+            <div class="row sp"><span class="badge b-new">#${i + 1}</span><button type="button" class="btn btn-d btn-xs" data-del="${i}">✕</button></div>
+            <div class="dist-grid rep-grid">
+              ${REP_FIELDS[tipo].map(k => {
+                const dat = `data-f="${k}" data-i="${i}"`;
+                let ctrl = `<input ${dat} inputmode="decimal" placeholder="0" value="${esc(r[k])}" />`;
+                if (k === "fundo") { const o = repFundosDisponibles(); ctrl = o.length ? `<select ${dat}><option value="">— Fundo —</option>${o.map(x => `<option value="${esc(x)}" ${fundoKey(x) === fundoKey(r.fundo) ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>` : `<input ${dat} value="${esc(r.fundo)}" />`; }
+                else if (k === "modulo") { const o = repModulos(r.fundo); ctrl = o.length ? `<select ${dat}><option value="">— Mód. —</option>${o.map(x => `<option value="${esc(x)}" ${String(x) === String(r.modulo) ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>` : `<input ${dat} value="${esc(r.modulo)}" />`; }
+                else if (k === "variedad") { const o = repVariedades(r.fundo, r.modulo); ctrl = o.length ? `<select ${dat}><option value="">— Var. —</option>${o.map(x => `<option value="${esc(x)}" ${x === r.variedad ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>` : `<input ${dat} value="${esc(r.variedad)}" />`; }
+                else if (k === "formato") ctrl = `<select ${dat}><option value="">— Formato —</option>${S.M.formatos.map(x => `<option value="${esc(x)}" ${x === r.formato ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`;
+                else if (k === "destino") ctrl = `<select ${dat}><option value="">— Destino —</option>${S.M.destinos.map(x => `<option value="${esc(x)}" ${x === r.destino ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`;
+                else if (k === "ciclo") ctrl = `<div class="dist-total-box rep-cic" data-k="ciclo">${esc(r.ciclo || "—")}</div>`;
+                else if (k === "kilos") ctrl = `<div class="dist-total-box" data-k="kilos">${fmtKilos(calcKilos(r))}</div>`;
+                else if (k === "kgJor") ctrl = `<div class="dist-total-box" data-k="kgJor">${fmtKgJor(calcKgJor(r))}</div>`;
+                return `<div class="dist-cell"><label>${REP_LBL[k]}</label>${ctrl}</div>`;
+              }).join("")}
+            </div>
+          </div>
+        `).join("");
+        paintTot();
+      };
+      const dirty = () => { st.dirty = true; store.set(ck, { filas: st.filas, estado: st.estado, dirty: true }); if ($("rb")) { $("rb").className = "badge b-bor"; $("rb").textContent = "SIN GUARDAR"; } };
+      paint();
+
+      $("r-list").oninput = e => {
+        const t = e.target, k = t.dataset.f; if (!k || t.tagName === "SELECT") return;
+        const i = Number(t.dataset.i), r = st.filas[i];
+        r[k] = t.value; r.ciclo = repCiclo(r.fundo, r.modulo, r.variedad);
+        const card = $("r-list").querySelector(`[data-c="${i}"]`);
+        if (card) { card.querySelector(`[data-k="ciclo"]`).textContent = r.ciclo || "—"; card.querySelector(`[data-k="kilos"]`).textContent = fmtKilos(calcKilos(r)); card.querySelector(`[data-k="kgJor"]`).textContent = fmtKgJor(calcKgJor(r)); }
+        paintTot(); dirty();
+      };
+      $("r-list").onchange = e => {
+        const t = e.target, k = t.dataset.f; if (!k) return;
+        const r = st.filas[Number(t.dataset.i)]; r[k] = t.value;
+        if (k === "fundo") { const ms = repModulos(r.fundo); r.modulo = ms.length === 1 ? ms[0] : ""; const vs = r.modulo ? repVariedades(r.fundo, r.modulo) : []; r.variedad = vs.length === 1 ? vs[0] : ""; }
+        if (k === "modulo") { const vs = repVariedades(r.fundo, r.modulo); r.variedad = vs.length === 1 ? vs[0] : ""; }
+        r.ciclo = repCiclo(r.fundo, r.modulo, r.variedad);
+        dirty(); paint();
+      };
+      $("r-list").onclick = e => { const d = e.target.closest("[data-del]"); if (d) { st.filas.splice(Number(d.dataset.del), 1); if (!st.filas.length) st.filas.push(repNuevaFila()); dirty(); paint(); } };
+      $("r-img").onclick = () => repImagen(tipo, st.filas, fmtDMY(st.fecha));
+      $("rf").onchange = async e => {
+        if (!e.target.value) return;
+        st.fecha = e.target.value; st.filas = []; st.estado = "NUEVO"; st.dirty = false;
+        const r = await api({ accion: "getReporte", pin: S.pin, tipo, fecha: st.fecha });
+        if (r?.ok && r.data?.filas?.length) { st.filas = r.data.filas.map(repNorm); st.estado = "GUARDADO"; }
+        renderRepIngreso(tipo);
+      };
+      $("r-add").onclick = () => { st.filas.push(repNuevaFila()); dirty(); paint(); };
+      $("r-tpl").onclick = () => repExcel(tipo, [repNuevaFila()], `Plantilla_${cfg.titulo}.xlsx`, true);
+      $("r-fl").onchange = async e => {
+        const f = e.target.files[0]; if (!f) return;
+        try {
+          const rows = await leerExcel(f);
+          let h = -1, idx = {};
+          for (let i = 0; i < Math.min(rows.length, 12); i++) {
+            const m = {};
+            (rows[i] || []).map(normH).forEach((x, c) => {
+              if (x === "FUNDO") m.fundo = c; else if (x === "MODULO") m.modulo = c; else if (x === "VARIEDAD") m.variedad = c;
+              else if (x === "FORMATO") m.formato = c; else if (x === "DESTINO") m.destino = c; else if (x.startsWith("DIAS")) m.dias = c;
+              else if (x === "HA") m.ha = c; else if (/^KG ?\/ ?HA$/.test(x)) m.kgHa = c; else if (x.startsWith("JORNAL")) m.jornales = c;
+            });
+            if (m.modulo !== undefined && m.variedad !== undefined) { h = i; idx = m; break; }
+          }
+          if (h < 0) return toast("Columnas Módulo y Variedad no halladas");
+          const base = repNuevaFila(), imp = [];
+          rows.slice(h + 1).forEach(r => {
+            const g = k => idx[k] === undefined ? "" : r[idx[k]];
+            const mod = String(g("modulo") ?? "").trim(), vr = String(g("variedad") ?? "").trim();
+            if (!mod && !vr) return;
+            const fnd = repFundoCanon(g("fundo")) || base.fundo, vc = repVarCanon(fnd, vr);
+            imp.push({ fundo: fnd, modulo: mod, variedad: vc, ciclo: repCiclo(fnd, mod, vc), formato: String(g("formato") ?? "").trim(), destino: String(g("destino") ?? "").trim(), dias: String(g("dias") ?? "").trim(), ha: String(g("ha") ?? "").trim(), kgHa: String(g("kgHa") ?? "").trim(), jornales: String(g("jornales") ?? "").trim() });
+          });
+          if (!imp.length) return toast("Sin filas válidas");
+          st.filas = [...st.filas.filter(x => !repVacia(x)), ...imp]; dirty(); paint(); toast(`✓ ${imp.length} filas importadas`);
+        } catch (err) { toast(err.message); }
+        e.target.value = "";
+      };
+      $("r-sv").onclick = async () => {
+        const val = st.filas.filter(r => !repVacia(r)); if (!val.length) return toast("Agrega al menos una fila");
+        const btn = $("r-sv"); btn.disabled = true; btn.textContent = "Guardando...";
+        const scN = getScope();
+        await api({ accion: "guardarReporte", pin: S.pin, tipo, fecha: st.fecha, usuario: S.nombre, zona: scN.zonas.join(", "), fundo: scN.fundos.join(", "), filas: val });
+        btn.disabled = false; st.filas = val; st.dirty = false; st.estado = "GUARDADO"; st.histOk = false;
+        store.set(ck, { filas: val, estado: "GUARDADO", dirty: false, ts: Date.now() });
+        renderRepIngreso(tipo);
+        toast(`✓ ${cfg.titulo} guardado en Drive`);
+      };
+      if ($("r-dl")) {
+        $("r-dl").onclick = async () => {
+          if (!(await confirmar("Borrar", `¿Eliminar ${cfg.titulo} del ${fmtDMY(st.fecha)}?`))) return;
+          await api({ accion: "borrarReporte", pin: S.pin, tipo, fecha: st.fecha });
+          store.del(ck); st.filas = [repNuevaFila()]; st.estado = "NUEVO"; st.dirty = false; st.histOk = false;
+          renderRepIngreso(tipo); toast("Eliminado");
+        };
+      }
+    }
+
+    async function abrirReporte(tipo, tk) {
+      const pane = $(`pane-${tipo}`), st = S.rep[tipo];
+      if (!st.vistaInit) { st.vista = canCons() ? "cons" : "mio"; st.vistaInit = true; }
+      const ck = `${CK.REPD}${S.demo ? "demo" : "live"}_${tipo}_${st.fecha}_${S.pin}`;
+      const c = store.get(ck, null);
+      if (c?.filas?.length && !st.filas.length) { st.filas = c.filas.map(repNorm); st.estado = c.estado || "GUARDADO"; }
+
+      pane.innerHTML = `
+        ${canCons() ? `<div class="tabs" style="margin-bottom:6px"><button type="button" data-rv="mio" class="${st.vista === "mio" ? "active" : ""}">Mi ingreso</button><button type="button" data-rv="cons" class="${st.vista === "cons" ? "active" : ""}">Consolidado</button></div>` : ""}
+        <div id="rep-body"></div>
+      `;
+      pane.querySelectorAll("[data-rv]").forEach(b => { b.onclick = () => { st.vista = b.dataset.rv; abrirReporte(tipo, ++S.token); }; });
+
+      if (canCons() && st.vista === "cons") {
+        S.res.tipo = tipo;
+        $("rep-body").innerHTML = `<div class="card"><div class="row sp"><span class="m">Vista consolidada de <b>${REP_CFG[tipo].titulo}</b></span><button id="go-c" type="button" class="btn btn-xs">Ir a Consolidados →</button></div></div>`;
+        $("go-c").onclick = () => { S.activeTab = "resumen"; renderShell(); };
+        return;
+      }
+      renderRepIngreso(tipo);
+      if (!st.dirty) {
+        const r = await api({ accion: "getReporte", pin: S.pin, tipo, fecha: st.fecha });
+        if (S.token === tk && S.activeTab === tipo && st.vista === "mio" && !st.dirty && r?.ok && r.data?.filas?.length) {
+          st.filas = r.data.filas.map(repNorm); st.estado = "GUARDADO"; renderRepIngreso(tipo);
+        }
+      }
+    }
+
+    // =========================================================================
+    // MÓDULO CONSOLIDADOS (4 BOTONES SIN PARÉNTESIS + FUNDO + EXPORTAR TODO)
+    // =========================================================================
+    function buildRowsForType(tipo, envs) {
+      const filt = (envs || []).filter(e => inScope({ fundo: e.fundo, zona: e.zona }));
+      if (tipo === "tareos") {
+        const rows = [];
+        filt.forEach(env => {
+          const fnd = parseList(env.fundo)[0] || env.fundo || env.zona || "";
+          (env.filas || []).forEach(f => rows.push({ fecha: env.fecha, codigo: f.codigo || "", dni: f.dni || "", nombre: f.nombre || "", labor: f.labor || "", horas: toNum(f.horas), fundo: f.fundo || fnd }));
+        });
+        return rows;
+      }
+      if (tipo === "asistencia") {
+        const rows = [];
+        filt.forEach(env => {
+          (env.filas || []).forEach(f => {
+            const fnd = f.fundo || parseList(env.fundo)[0] || "";
+            if (inScope({ fundo: fnd, zona: env.zona })) rows.push({ fecha: env.fecha, ...f, fundo: fnd });
+          });
+        });
+        return rows;
+      }
+      const rows = [];
+      filt.forEach(env => {
+        (env.filas || []).forEach(f => {
+          const fnd = f.fundo || parseList(env.fundo)[0] || "";
+          if (inScope({ fundo: fnd, zona: env.zona })) rows.push({ ...f, fecha: env.fecha, fundo: fnd });
+        });
+      });
+      return rows;
+    }
+
+    async function renderConsolidados(tk) {
+      const pane = $("pane-resumen");
+      if (!pane) return;
+      const rs = S.res;
+      const tipos = [
+        { id: "tareos", lbl: "Tareos" },
+        { id: "asistencia", lbl: "Asistencia" },
+        { id: "ajuste", lbl: "Ajuste" },
+        { id: "proyeccion", lbl: "Proyección" }
+      ];
+
+      pane.innerHTML = `
+        <div class="card">
+          <div class="tabs" id="res-btns" style="margin-bottom:8px">
+            ${tipos.map(t => `<button type="button" data-rt="${t.id}" class="${rs.tipo === t.id ? "active" : ""}">${t.lbl}</button>`).join("")}
+          </div>
+          <div class="row sp" style="margin-bottom:6px">
+            <div class="row">
+              <input type="date" id="res-d1" value="${rs.desde}" />
+              <span class="m">a</span>
+              <input type="date" id="res-d2" value="${rs.hasta}" />
+            </div>
+            <div class="row">
+              <button id="res-all" type="button" class="btn btn-w btn-xs">Actualizar datos</button>
+              <button id="res-xls" type="button" class="btn btn-inf btn-xs">Descargar excel</button>
+              <button id="res-xall" type="button" class="btn btn-s btn-xs">Excel completo</button>
+            </div>
+          </div>
+          <div id="res-st" class="m"></div>
+        </div>
+        <div id="res-body"></div>
+      `;
+
+      const paintTable = () => {
+        const body = $("res-body"); if (!body) return;
+        const rows = buildRowsForType(rs.tipo, rs.data);
+
+        if (rs.tipo === "tareos") {
+          const hrs = rows.reduce((s, x) => s + x.horas, 0);
+          body.innerHTML = `
+            <div class="kpis"><div class="kpi"><span class="m">Registros Tareo</span><b>${rows.length}</b></div><div class="kpi"><span class="m">Horas Totales</span><b>${hrs.toFixed(1).replace(/\.0$/, "")}</b></div></div>
+            <div class="card"><div class="table-wrap"><table class="res-tbl">
+              <thead><tr><th>Fecha</th><th>C.LABOR</th><th>DNI</th><th>NOMBRES</th><th>LABOR</th><th>HORAS</th><th>FUNDO</th></tr></thead>
+              <tbody>${rows.length ? rows.map(r => `<tr><td>${fmtDMY(r.fecha)}</td><td><b>${esc(r.codigo)}</b></td><td>${esc(r.dni)}</td><td>${esc(r.nombre)}</td><td>${esc(r.labor)}</td><td>${r.horas}</td><td><b>${esc(r.fundo)}</b></td></tr>`).join("") : `<tr><td colspan="7" class="m">Sin tareos en este rango.</td></tr>`}</tbody>
+            </table></div></div>
+          `;
+          $("res-xls").onclick = () => {
+            if (typeof XLSX === "undefined" || !rows.length) return toast("Sin datos");
+            const aoa = [["FECHA", "C.LABOR", "DNI", "NOMBRES", "LABOR", "HORAS", "FUNDO"]];
+            rows.forEach(r => aoa.push([fmtDMY(r.fecha), r.codigo, r.dni, r.nombre, r.labor, r.horas, r.fundo]));
+            const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "Tareos");
+            XLSX.writeFile(wb, `Consolidado_Tareos_${rs.desde}_a_${rs.hasta}.xlsx`);
+          };
+        } else if (rs.tipo === "asistencia") {
+          const tot = rows.reduce((s, r) => s + totAsis(r), 0);
+          body.innerHTML = `
+            <div class="kpis"><div class="kpi"><span class="m">Grupos</span><b>${rows.length}</b></div><div class="kpi"><span class="m">Total Asistencia</span><b>${tot}</b></div></div>
+            <div class="card"><div class="table-wrap"><table class="res-tbl" style="min-width:680px">
+              <thead><tr><th>Fecha</th><th>Fundo</th><th>Grupo</th><th>Supervisor</th><th>Cosecha</th><th>Sup.Ciclo</th><th>Sup.Cuad</th><th>Jabero</th><th>Limpieza</th><th>Riego</th><th>Otros</th><th>Total</th></tr></thead>
+              <tbody>${rows.length ? rows.map(r => `<tr><td>${fmtDMY(r.fecha)}</td><td><b>${esc(r.fundo)}</b></td><td>${esc(r.grupo)}</td><td>${esc(r.supervisor)}</td><td>${toNum(r.cosecha)}</td><td>${toNum(r.supCiclo)}</td><td>${toNum(r.supCuadrilla)}</td><td>${toNum(r.jabero)}</td><td>${toNum(r.limpieza)}</td><td>${toNum(r.riego)}</td><td>${toNum(r.otros)}</td><td><b>${totAsis(r)}</b></td></tr>`).join("") : `<tr><td colspan="12" class="m">Sin asistencias en este rango.</td></tr>`}</tbody>
+            </table></div></div>
+          `;
+          $("res-xls").onclick = () => {
+            if (typeof XLSX === "undefined" || !rows.length) return toast("Sin datos");
+            const aoa = [["Fecha", "Fundo", "N° Grupo", "Supervisor", "Cosecha", "Sup.Ciclo", "Sup.Cuadrilla", "Jabero", "Limpieza", "Riego", "Otros", "total"]];
+            rows.forEach(r => aoa.push([fmtDMY(r.fecha), r.fundo, r.grupo, r.supervisor, toNum(r.cosecha), toNum(r.supCiclo), toNum(r.supCuadrilla), toNum(r.jabero), toNum(r.limpieza), toNum(r.riego), toNum(r.otros), totAsis(r)]));
+            const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "Asistencia");
+            XLSX.writeFile(wb, `Consolidado_Asistencia_${rs.desde}_a_${rs.hasta}.xlsx`);
+          };
+        } else {
+          const ha = rows.reduce((s, r) => s + toNum(r.ha), 0), ki = rows.reduce((s, r) => s + calcKilos(r), 0), jo = rows.reduce((s, r) => s + toNum(r.jornales), 0);
+          body.innerHTML = `
+            <div class="kpis"><div class="kpi"><span class="m">Ha</span><b>${ha.toFixed(2)}</b></div><div class="kpi"><span class="m">Kilos</span><b>${fmtKilos(ki)}</b></div><div class="kpi"><span class="m">Jornales</span><b>${jo}</b></div><div class="kpi"><span class="m">Kg/Jornal</span><b>${jo > 0 ? fmtKgJor(ki / jo) : "0.0"}</b></div></div>
+            <div class="card"><div class="table-wrap"><table class="res-tbl" style="min-width:860px">
+              <thead><tr>${REP_COLS.map(c => `<th>${REP_LBL[c]}</th>`).join("")}</tr></thead>
+              <tbody>${rows.length ? rows.map(r => `<tr>${REP_COLS.map(c => `<td>${c === "kilos" ? fmtKilos(repVal(c, r)) : c === "kgJor" ? fmtKgJor(repVal(c, r)) : esc(repVal(c, r))}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${REP_COLS.length}" class="m">Sin registros en este rango.</td></tr>`}</tbody>
+            </table></div></div>
+          `;
+          $("res-xls").onclick = () => {
+            if (!rows.length) return toast("Sin datos");
+            repExcel(rs.tipo, rows, `Consolidado_${REP_CFG[rs.tipo].titulo}_${rs.desde}_a_${rs.hasta}.xlsx`, false);
+          };
+        }
+      };
+
+      const fetchTipo = async (t, force = false) => {
+        const ck = `${CK.RES}${S.demo ? "demo" : "live"}_${t}_${rs.desde}_${rs.hasta}`;
+        const c = store.get(ck, null);
+        if (c?.data && !force) {
+          rs.counts[t] = c.data.length;
+          if (rs.tipo === t) { rs.data = c.data; paintTable(); }
+          if (c.ts && (Date.now() - c.ts) < TTL_MS) return c.data;
+        }
+        const r = (t === "tareos" || t === "asistencia")
+          ? await api({ accion: "listarConsolidado", pin: S.pin, tipo: t, desde: rs.desde, hasta: rs.hasta })
+          : await api({ accion: "listarReportes", pin: S.pin, tipo: t, desde: rs.desde, hasta: rs.hasta });
+        if (r?.ok) {
+          const arr = r.data || [];
+          rs.counts[t] = arr.length;
+          store.set(ck, { data: arr, ts: Date.now() });
+          if (rs.tipo === t && S.token === tk && S.activeTab === "resumen") {
+            rs.data = arr;
+            if ($("res-st")) $("res-st").textContent = `${arr.length} envío(s) encontrados`;
+            paintTable();
+          }
+          return arr;
+        }
+        return c?.data || [];
+      };
+
+      const refreshAll4 = async (force = true) => {
+        if ($("res-st")) $("res-st").textContent = "Actualizando datos...";
+        const [dT, dA, dAj, dPr] = await Promise.all([
+          fetchTipo("tareos", force), fetchTipo("asistencia", force), fetchTipo("ajuste", force), fetchTipo("proyeccion", force)
+        ]);
+        if ($("res-st")) $("res-st").textContent = `Actualizado: ${dT.length} Tareos · ${dA.length} Asist. · ${dAj.length} Ajuste · ${dPr.length} Proy.`;
+        return { tareos: dT, asistencia: dA, ajuste: dAj, proyeccion: dPr };
+      };
+
+      $("res-btns").onclick = e => {
+        const b = e.target.closest("[data-rt]"); if (!b) return;
+        rs.tipo = b.dataset.rt;
+        $("res-btns").querySelectorAll("button").forEach(x => x.classList.toggle("active", x.dataset.rt === rs.tipo));
+        fetchTipo(rs.tipo, false);
+      };
+      $("res-d1").onchange = e => { rs.desde = e.target.value || rs.desde; if (rs.desde > rs.hasta) rs.hasta = rs.desde; };
+      $("res-d2").onchange = e => { rs.hasta = e.target.value || rs.hasta; if (rs.hasta < rs.desde) rs.desde = rs.hasta; };
+      $("res-all").onclick = async () => {
+        $("res-all").disabled = true;
+        await refreshAll4(true);
+        $("res-all").disabled = false;
+        toast("Todos los reportes actualizados");
+      };
+      $("res-xall").onclick = async () => {
+        if (typeof XLSX === "undefined") return toast("Cargando Excel...");
+        $("res-xall").disabled = true;
+        const all = await refreshAll4(false);
+        $("res-xall").disabled = false;
+        const wb = XLSX.utils.book_new();
+
+        const rT = buildRowsForType("tareos", all.tareos);
+        const aoaT = [["FECHA", "C.LABOR", "DNI", "NOMBRES", "LABOR", "HORAS", "FUNDO"]];
+        rT.forEach(r => aoaT.push([fmtDMY(r.fecha), r.codigo, r.dni, r.nombre, r.labor, r.horas, r.fundo]));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoaT), "Tareos");
+
+        const rA = buildRowsForType("asistencia", all.asistencia);
+        const aoaA = [["Fecha", "Fundo", "N° Grupo", "Supervisor", "Cosecha", "Sup.Ciclo", "Sup.Cuadrilla", "Jabero", "Limpieza", "Riego", "Otros", "total"]];
+        rA.forEach(r => aoaA.push([fmtDMY(r.fecha), r.fundo, r.grupo, r.supervisor, toNum(r.cosecha), toNum(r.supCiclo), toNum(r.supCuadrilla), toNum(r.jabero), toNum(r.limpieza), toNum(r.riego), toNum(r.otros), totAsis(r)]));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoaA), "Asistencia");
+
+        ["ajuste", "proyeccion"].forEach(tp => {
+          const rows = buildRowsForType(tp, all[tp]);
+          const aoa = [REP_COLS.map(c => REP_LBL[c])];
+          rows.forEach(r => aoa.push(REP_COLS.map(c => repVal(c, r))));
+          XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), REP_CFG[tp].titulo);
+        });
+
+        XLSX.writeFile(wb, `Consolidado_General_${rs.desde}_a_${rs.hasta}.xlsx`);
+        toast("✓ Excel completo descargado");
+      };
+
+      paintTable();
+      fetchTipo(rs.tipo, false);
+    }
+
+    // =========================================================================
+    // ARRANQUE INSTANTÁNEO (0ms)
+    // =========================================================================
+    function bootstrap() {
+      try {
+        applyTheme(store.getRaw(CK.TH, "dark"));
+        applyBg(store.getRaw(CK.BG, ""));
+        hydrateCache();
+        $("btn-theme").onclick = () => {
+          const next = document.body.classList.contains("light") ? "dark" : "light";
+          store.setRaw(CK.TH, next);
+          applyTheme(next);
+        };
+        const bs = $("m-script"), bd = $("m-demo");
+        const paintMode = () => {
+          bs.className = !S.demo ? "on-s" : "";
+          bd.className = S.demo ? "on-d" : "";
+          setSync(S.demo ? "Modo Demo" : (S.pin ? `Drive OK · ${S.nombre}` : "Script (Drive)"), S.demo);
+        };
+        bs.onclick = () => { S.demo = false; paintMode(); if (S.pin) { syncThirdPlaneDatabases(); renderShell(); } else syncUsersOnly(true); };
+        bd.onclick = () => { S.demo = true; paintMode(); if (S.pin) { syncThirdPlaneDatabases(); renderShell(); } else syncUsersOnly(true); };
+        paintMode();
+        renderLogin();
+      } catch (err) {
+        $("app").innerHTML = `<div class="login-wrap"><div class="card login-card"><b>Error de inicio</b><p class="m">${esc(err.message)}</p></div></div>`;
+      }
+    }
+
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bootstrap);
+    else bootstrap();
